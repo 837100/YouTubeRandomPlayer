@@ -91,7 +91,7 @@ app.post('/api/get-playlist-videos', async (req, res) => {
 
     while (videos.length < maxTotal) {
       const url = 
-        `${YT_API}/playlistItems?part=snippet&playlistId=${encodeURIComponent(playlistId)}` +
+        `${YT_API}/playlistItems?part=snippet,contentDetails&playlistId=${encodeURIComponent(playlistId)}` +
         `&maxResults=${maxResults}&key=${apiKey}` +
         (pageToken ? `&pageToken=${encodeURIComponent(pageToken)}` : '');
 
@@ -99,14 +99,50 @@ app.post('/api/get-playlist-videos', async (req, res) => {
       const data = await response.json();
       
       const items = data.items || [];
-      videos.push(
-        ...items
-          .map((item) => ({
-            videoId: item.snippet?.resourceId?.videoId,
+      
+      // 비디오 ID 수집
+      const videoIds = items
+        .map((item) => item.contentDetails?.videoId)
+        .filter(Boolean);
+
+      // 비디오 상세 정보 조회 (duration 및 liveBroadcastContent 확인)
+      if (videoIds.length > 0) {
+        const videosUrl = 
+          `${YT_API}/videos?part=contentDetails,snippet&id=${encodeURIComponent(videoIds.join(','))}&key=${apiKey}`;
+        
+        const videosResponse = await fetch(videosUrl);
+        const videosData = await videosResponse.json();
+        const videoDetailsMap = {};
+        
+        videosData.items?.forEach(video => {
+          videoDetailsMap[video.id] = {
+            duration: video.contentDetails?.duration,
+            liveBroadcastContent: video.contentDetails?.liveBroadcastContent
+          };
+        });
+
+        // 비디오 정보와 상세 정보 결합
+        items.forEach((item) => {
+          const videoId = item.contentDetails?.videoId;
+          const details = videoDetailsMap[videoId] || {};
+          
+          videos.push({
+            videoId: videoId,
             title: item.snippet?.title || '제목 없음',
-          }))
-          .filter((v) => v.videoId)
-      );
+            duration: details.duration,
+            liveBroadcastContent: details.liveBroadcastContent
+          });
+        });
+      } else {
+        items.forEach((item) => {
+          videos.push({
+            videoId: item.contentDetails?.videoId,
+            title: item.snippet?.title || '제목 없음',
+            duration: null,
+            liveBroadcastContent: null
+          });
+        });
+      }
 
       pageToken = data.nextPageToken;
       if (!pageToken || videos.length >= maxTotal) break;

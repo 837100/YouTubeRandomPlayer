@@ -3,9 +3,12 @@ const channelInput = document.getElementById("channelInput");
 const statusEl = document.getElementById("status");
 const player = document.getElementById("player");
 const randomAgainBtn = document.getElementById("randomAgainBtn");
+const excludeShortsCheckbox = document.getElementById("excludeShortsCheckbox");
+const excludeLiveCheckbox = document.getElementById("excludeLiveCheckbox");
 
 let currentChannelHandle = "";
 let currentVideoId = "";
+let currentVideos = [];
 
 // 로컬 서버 주소 (로컬: http://localhost:3000, 배포 시 서버 주소로 변경)
 const SERVER_URL = "http://localhost:3000";
@@ -14,6 +17,47 @@ const YT_API = "https://www.googleapis.com/youtube/v3";
 
 function setStatus(message) {
   statusEl.textContent = message;
+}
+
+// ISO 8601 duration을 초 단위로 변환 (예: PT10M30S -> 630)
+function parseDuration(duration) {
+  if (!duration) return 0;
+  
+  const regex = /PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?/;
+  const match = duration.match(regex);
+  
+  if (!match) return 0;
+  
+  const hours = parseInt(match[1]) || 0;
+  const minutes = parseInt(match[2]) || 0;
+  const seconds = parseInt(match[3]) || 0;
+  
+  return hours * 3600 + minutes * 60 + seconds;
+}
+
+// 영상이 Shorts인지 판별 (60초 이하)
+function isShorts(video) {
+  if (!video.duration) return false;
+  const seconds = parseDuration(video.duration);
+  return seconds <= 60;
+}
+
+// 영상이 Live인지 판별
+function isLive(video) {
+  return video.liveBroadcastContent === 'live' || video.liveBroadcastContent === 'upcoming';
+}
+
+// 체크박스 설정에 따라 영상 필터링
+function filterVideos(videos) {
+  return videos.filter(video => {
+    if (excludeShortsCheckbox.checked && isShorts(video)) {
+      return false;
+    }
+    if (excludeLiveCheckbox.checked && isLive(video)) {
+      return false;
+    }
+    return true;
+  });
 }
 
 async function resolveChannelId(handle) {

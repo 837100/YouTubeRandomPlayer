@@ -17,6 +17,17 @@
         <input id="channelInput" type="text" placeholder="creatorname" required />
       </label>
 
+      <div class="filters">
+        <label class="filter-item">
+          <input type="checkbox" id="excludeShortsCheckbox" />
+          Shorts 제외
+        </label>
+        <label class="filter-item">
+          <input type="checkbox" id="excludeLiveCheckbox" />
+          Live 영상 제외
+        </label>
+      </div>
+
       <div class="actions">
         <button type="submit">랜덤 영상 재생</button>
         <button type="button" id="randomAgainBtn" disabled>다른 랜덤 영상</button>
