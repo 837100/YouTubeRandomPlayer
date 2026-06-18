@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>랜덤 크리에이터 영상 재생기</title>
+  <link rel="stylesheet" href="stylee.css" />
+</head>
+<body>
+  <main class="container">
+    <h1>랜덤 크리에이터 영상 재생기</h1>
+    <p class="desc">YouTube 채널 링크를 넣으면 해당 크리에이터의 영상 중 하나를 랜덤으로 재생합니다.</p>
+
+    <form id="creatorForm" class="card">
+      <label>
+        YouTube 채널 핸들 (@없이 입력)
+        <input id="channelInput" type="text" placeholder="creatorname" required />
+      </label>
+
+      <div class="actions">
+        <button type="submit">랜덤 영상 재생</button>
+        <button type="button" id="randomAgainBtn" disabled>다른 랜덤 영상</button>
+      </div>
+    </form>
+
+    <section class="card">
+      <div id="status">대기 중...</div>
+      <div class="playerWrap">
+        <iframe
+          id="player"
+          width="100%"
+          height="480"
+          src=""
+          title="YouTube player"
+          frameborder="0"
+          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen"
+          allowfullscreen
+        ></iframe>
+      </div>
+    </section>
+  </main>
+
+  <script src="scripts.js"></script>
+</body>
+</html>
