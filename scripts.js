@@ -2,7 +2,9 @@ const form = document.getElementById("creatorForm");
 const channelInput = document.getElementById("channelInput");
 const statusEl = document.getElementById("status");
 const player = document.getElementById("player");
-const randomAgainBtn = document.getElementById("randomAgainBtn");
+const loadVideoBtn = document.getElementById("loadVideoBtn");
+// "다른 랜덤 영상" 버튼은 사용하지 않음
+// const randomAgainBtn = document.getElementById("randomAgainBtn");
 const excludeShortsCheckbox = document.getElementById("excludeShortsCheckbox");
 const excludeLiveCheckbox = document.getElementById("excludeLiveCheckbox");
 const cinemaToggleBtn = document.getElementById("cinemaToggleBtn");
@@ -11,6 +13,10 @@ const cinemaToggleLabel = cinemaToggleBtn.querySelector(".cinemaToggle__label");
 let currentChannelHandle = "";
 let currentVideoId = "";
 let currentVideos = [];
+let isLoading = false;
+const LOAD_BTN_DEFAULT_LABEL = "랜덤 영상 재생";
+const LOAD_BTN_LOADING_LABEL = "불러오는 중...";
+const CINEMA_MODE_KEY = "cinemaMode";
 
 // 로컬 서버 주소 (로컬: http://localhost:3000, 배포 시 서버 주소로 변경)
 const SERVER_URL = "http://localhost:3000";
@@ -125,10 +131,17 @@ async function fetchAllVideosFromPlaylist(playlistId, maxTotal = 200) {
 function playVideo(videoId) {
   currentVideoId = videoId;
   player.src = `https://www.youtube.com/embed/${videoId}?autoplay=1&rel=0&controls=1&enablejsapi=1&modestbranding=1`;
-  randomAgainBtn.disabled = false;
+  // "다른 랜덤 영상" 버튼은 사용하지 않음
+  // randomAgainBtn.disabled = false;
 }
 
 async function loadRandomVideo() {
+  // 코드 레벨 중복 호출 가드
+  if (isLoading) return;
+  isLoading = true;
+  loadVideoBtn.disabled = true;
+  loadVideoBtn.textContent = LOAD_BTN_LOADING_LABEL;
+
   try {
     setStatus("채널 확인 중...");
     const channelId = await resolveChannelId(currentChannelHandle);
@@ -142,7 +155,7 @@ async function loadRandomVideo() {
     const uploadsPlaylistId = await fetchUploadsPlaylistId(channelId);
 
     if (!uploadsPlaylistId) {
-      setStatus("업로드 재생목록을 찾지 못했습니다.");
+      setStatus("업로드 재생목록을 찾을 못했습니다.");
       return;
     }
 
@@ -159,6 +172,10 @@ async function loadRandomVideo() {
   } catch (error) {
     console.error(error);
     setStatus("오류가 발생했습니다. 서버가 실행 중인지 확인하세요.");
+  } finally {
+    isLoading = false;
+    loadVideoBtn.disabled = false;
+    loadVideoBtn.textContent = LOAD_BTN_DEFAULT_LABEL;
   }
 }
 
@@ -171,22 +188,36 @@ form.addEventListener("submit", async (e) => {
     return;
   }
 
-  randomAgainBtn.disabled = true;
   await loadRandomVideo();
 });
 
-randomAgainBtn.addEventListener("click", async () => {
-  if (!currentChannelHandle) return;
-  await loadRandomVideo();
-});
+// "다른 랜덤 영상" 버튼은 사용하지 않음
+// randomAgainBtn.addEventListener("click", async () => {
+//   if (!currentChannelHandle) return;
+//   await loadRandomVideo();
+// });
 
 // 영화관 모드 토글
 function setCinemaMode(enabled) {
   document.body.classList.toggle("cinema", enabled);
   cinemaToggleBtn.setAttribute("aria-pressed", String(enabled));
   cinemaToggleLabel.textContent = enabled ? "기본 모드" : "영화관 모드";
+  try {
+    localStorage.setItem(CINEMA_MODE_KEY, String(enabled));
+  } catch (error) {
+    // 시크릿 모드/쿠키 차단 등에서 localStorage가 막혀도 무시
+  }
 }
 
 cinemaToggleBtn.addEventListener("click", () => {
   setCinemaMode(!document.body.classList.contains("cinema"));
 });
+
+// 페이지 로드 시 영화관 모드 복원
+try {
+  if (localStorage.getItem(CINEMA_MODE_KEY) === "true") {
+    setCinemaMode(true);
+  }
+} catch (error) {
+  // localStorage 접근 실패 시 기본 모드로 시작
+}
