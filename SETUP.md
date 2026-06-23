@@ -9,9 +9,11 @@ YouTubeRandomPlayer/
 ├── index.html          # 프론트엔드 HTML
 ├── scripts.js          # 프론트엔드 JavaScript
 ├── stylee.css          # 스타일시트
-├── server.js           # 백엔드 Node.js 서버
-├── package.json        # Node.js 의존성
-├── APIKEY.txt          # YouTube API 키 (로컬에만 있음)
+├── servers/            # 백엔드 디렉터리
+│   ├── server.js       # Node.js 서버
+│   ├── package.json    # Node.js 의존성
+│   ├── APIKEY.txt      # YouTube API 키 (로컬에만 있음)
+│   └── node_modules/   # npm 의존성
 └── .gitignore          # Git 제외 파일
 ```
 
@@ -31,22 +33,27 @@ YouTubeRandomPlayer/
 
 ### 2. API 키 설정
 
-프로젝트 루트에 `APIKEY.txt` 파일 생성 후 API 키 입력:
+`servers/` 폴더에 `APIKEY.txt` 파일 생성 후 API 키 입력:
 
 ```bash
-echo "YOUR_API_KEY_HERE" > APIKEY.txt
+mkdir -p servers
+echo "YOUR_API_KEY_HERE" > servers/APIKEY.txt
 ```
 
 ### 3. 백엔드 서버 시작
 
+> 서버 명령은 모두 `servers/` 디렉터리 안에서 실행합니다.
+
 #### 방법 1: npm 사용
 ```bash
+cd servers
 npm install
 npm start
 ```
 
 #### 방법 2: Node.js 직접 실행
 ```bash
+cd servers
 npm install
 node server.js
 ```
@@ -55,7 +62,16 @@ node server.js
 
 ### 4. 프론트엔드 실행
 
-`index.html`을 브라우저에서 열기 (또는 로컬 서버로 실행)
+> ⚠️ **중요**: `index.html`을 브라우저에서 직접 열면 CORS 문제 등으로 정상 동작하지 않습니다. 반드시 로컬 서버를 통해 실행하세요.
+
+로컬 서버를 통해 실행 (포트 8000):
+
+```bash
+npm install -g serve
+serve -s . -p 8000
+```
+
+실행 후 브라우저에서 [http://localhost:8000](http://localhost:8000) 접속
 
 ## 사용 방법
 
