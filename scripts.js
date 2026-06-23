@@ -26,6 +26,7 @@ const PLAY_URL_BTN_LOADING_LABEL = "영상 불러오는 중...";
 const PLAYER_LOAD_TIMEOUT_MS = 12000;
 const CINEMA_MODE_KEY = "cinemaMode";
 const CHANNEL_HANDLE_KEY = "channelHandle";
+const PLAYED_VIDEO_IDS_KEY_PREFIX = "playedVideoIds";
 const DEFAULT_STATUS_MESSAGE = "대기 중...";
 
 // 로컬 서버 주소 (로컬: http://localhost:3000, 배포 시 서버 주소로 변경)
@@ -35,6 +36,27 @@ const YT_API = "https://www.googleapis.com/youtube/v3";
 
 function setStatus(message) {
   statusEl.textContent = message;
+}
+
+/**
+ * 상태 줄 오른쪽에 시청 기록 초기화 버튼을 함께 표시합니다.
+ */
+function setAllPlayedStatus() {
+  const message = document.createElement("span");
+  const resetBtn = document.createElement("button");
+
+  message.className = "statusMessage";
+  message.textContent = "이 채널의 필터 조건에 맞는 영상을 모두 재생했습니다.";
+
+  resetBtn.type = "button";
+  resetBtn.className = "statusAction";
+  resetBtn.textContent = "시청했던 영상 목록 초기화";
+  resetBtn.addEventListener("click", () => {
+    clearPlayedVideoIds();
+    setStatus("시청했던 영상 목록을 초기화했습니다.");
+  });
+
+  statusEl.replaceChildren(message, resetBtn);
 }
 
 /**
@@ -205,6 +227,62 @@ function filterVideos(videos) {
   });
 }
 
+/**
+ * 현재 채널 핸들에 해당하는 세션 저장소 키를 만듭니다.
+ */
+function getPlayedVideoIdsKey() {
+  return `${PLAYED_VIDEO_IDS_KEY_PREFIX}:${currentChannelHandle.trim().toLowerCase()}`;
+}
+
+/**
+ * 현재 브라우저 세션에서 이미 랜덤 재생된 영상 ID 목록을 가져옵니다.
+ */
+function getPlayedVideoIds() {
+  try {
+    const parsed = JSON.parse(sessionStorage.getItem(getPlayedVideoIdsKey()) || "[]");
+    return Array.isArray(parsed) ? parsed : [];
+  } catch (error) {
+    return [];
+  }
+}
+
+/**
+ * 현재 채널의 랜덤 재생 기록에 영상 ID를 추가합니다.
+ */
+function savePlayedVideoId(videoId) {
+  if (!videoId) return;
+
+  try {
+    const playedIds = getPlayedVideoIds();
+
+    if (!playedIds.includes(videoId)) {
+      playedIds.push(videoId);
+      sessionStorage.setItem(getPlayedVideoIdsKey(), JSON.stringify(playedIds));
+    }
+  } catch (error) {
+    // sessionStorage가 막힌 환경에서는 중복 제외만 건너뜀
+  }
+}
+
+/**
+ * 현재 채널의 랜덤 재생 기록을 초기화합니다.
+ */
+function clearPlayedVideoIds() {
+  try {
+    sessionStorage.removeItem(getPlayedVideoIdsKey());
+  } catch (error) {
+    // sessionStorage가 막힌 환경에서는 무시
+  }
+}
+
+/**
+ * 필터링된 영상 목록에서 이번 세션에 아직 재생하지 않은 후보를 고릅니다.
+ */
+function getUnplayedCandidates(videos) {
+  const playedIds = getPlayedVideoIds();
+  return videos.filter((video) => !playedIds.includes(video.videoId));
+}
+
 async function resolveChannelId(handle) {
   try {
     const response = await fetch(`${SERVER_URL}/api/resolve-channel`, {
@@ -318,7 +396,15 @@ async function loadRandomVideo() {
       return;
     }
 
-    const random = filtered[Math.floor(Math.random() * filtered.length)];
+    let candidates = getUnplayedCandidates(filtered);
+
+    if (!candidates.length) {
+      setAllPlayedStatus();
+      return;
+    }
+
+    const random = candidates[Math.floor(Math.random() * candidates.length)];
+    savePlayedVideoId(random.videoId);
     setStatus(`재생 중: ${random.title}`);
     playVideo(random.videoId);
     startedPlayback = true;

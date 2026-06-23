@@ -156,9 +156,39 @@ body.cinema .sideCard .btn-secondary {
 }
 
 .status {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
   margin-bottom: 14px;
   color: var(--muted);
   font-size: 14px;
+  min-height: 20px;
+}
+
+.statusMessage {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.statusAction {
+  flex: 0 0 auto;
+  padding: 0;
+  background: transparent;
+  color: var(--accent);
+  border: 0;
+  border-radius: 0;
+  font-size: 13px;
+  font-weight: 800;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  white-space: nowrap;
+}
+
+.statusAction:hover {
+  color: var(--text);
 }
 
 .card {
@@ -321,11 +351,6 @@ button:disabled {
 
 .btn-secondary:hover:not(:disabled) {
   border-color: var(--accent);
-}
-
-#status {
-  margin-bottom: 14px;
-  color: var(--muted);
 }
 
 .playerWrap {
