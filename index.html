@@ -1,11 +1,13 @@
 <!DOCTYPE html>
 <html lang="ko">
+
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>랜덤 크리에이터 영상 재생기</title>
   <link rel="stylesheet" href="stylee.css" />
 </head>
+
 <body>
   <header class="topbar">
     <h1>랜덤 크리에이터 영상 재생기</h1>
@@ -22,30 +24,28 @@
       <section class="card playerCard">
         <div id="status" class="status">대기 중...</div>
         <div class="playerWrap">
-          <iframe
-            id="player"
-            width="100%"
-            height="480"
-            src=""
-            title="YouTube player"
-            frameborder="0"
+          <iframe id="player" width="100%" height="480" src="" title="YouTube player" frameborder="0"
             allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen"
-            allowfullscreen
-          ></iframe>
+            allowfullscreen></iframe>
         </div>
       </section>
 
       <aside class="sidePanel">
         <form id="creatorForm" class="card sideCard">
+
+
           <label>
             YouTube 채널 핸들 (@없이 입력)
-            <input id="channelInput" type="text" placeholder="creatorname" required />
+            <div class="inputWrap">
+              <input id="channelInput" type="text" placeholder="creatorname" required />
+              <button type="button" id="clearChannelBtn" class="clearBtn" aria-label="입력 지우기" hidden>×</button>
+            </div>
           </label>
 
           <div class="filters">
             <label class="filter-item">
-              <input type="checkbox" id="excludeShortsCheckbox" />
-              Shorts 제외
+              <input type="checkbox" id="exclude60sCheckbox" />
+              60초 이하 영상 제외 <span class="filter-hint">(≈Shorts)</span>
             </label>
             <label class="filter-item">
               <input type="checkbox" id="excludeLiveCheckbox" />
@@ -55,15 +55,29 @@
 
           <div class="actions">
             <button type="submit" id="loadVideoBtn" class="btn-primary">랜덤 영상 재생</button>
-            <!-- "다른 랜덤 영상" 버튼은 사용하지 않음
-            <button type="button" id="randomAgainBtn" class="btn-secondary" disabled>다른 랜덤 영상</button>
-            -->
           </div>
         </form>
+
+        
+        <div class="divider" aria-hidden="true"></div>
+
+        <div class="directPlay">
+          <label>
+            직접 링크 재생
+            <div class="inputWrap">
+              <input id="videoUrlInput" type="url" placeholder="https://youtu.be/..." />
+              <button type="button" id="clearVideoUrlBtn" class="clearBtn" aria-label="영상 링크 지우기" hidden>×</button>
+            </div>
+          </label>
+          <div class="actions">
+            <button type="button" id="playUrlBtn" class="btn-primary">링크 영상 재생</button>
+          </div>
+        </div>
       </aside>
     </div>
   </main>
 
   <script src="scripts.js"></script>
 </body>
+
 </html>

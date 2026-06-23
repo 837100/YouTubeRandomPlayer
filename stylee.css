@@ -144,6 +144,10 @@ body.cinema .sideCard .actions {
   gap: 8px;
 }
 
+body.cinema .sideCard .directPlay {
+  gap: 8px;
+}
+
 body.cinema .sideCard .btn-primary,
 body.cinema .sideCard .btn-secondary {
   width: 100%;
@@ -192,6 +196,74 @@ input:focus {
   border-color: var(--accent);
 }
 
+/* ── 입력 칸 + 클리어 버튼 ───────────────────────────── */
+.inputWrap {
+  position: relative;
+  margin-top: 8px;
+}
+
+.inputWrap input {
+  margin-top: 0;
+  padding-right: 36px; /* X 버튼 자리 확보 */
+}
+
+.clearBtn {
+  position: absolute;
+  top: 50%;
+  right: 8px;
+  transform: translateY(-50%);
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted);
+  border: 0;
+  font-size: 18px;
+  line-height: 1;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.clearBtn:hover {
+  color: var(--text);
+  background: rgba(56, 189, 248, 0.12);
+}
+
+.clearBtn[hidden] {
+  display: none;
+}
+
+body.cinema .sideCard .inputWrap input {
+  padding-right: 32px;
+}
+
+body.cinema .sideCard .clearBtn {
+  right: 6px;
+  width: 22px;
+  height: 22px;
+  font-size: 16px;
+}
+
+.directPlay {
+  display: grid;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.directPlay label {
+  margin-bottom: 0;
+}
+
+.divider {
+  height: 1px;
+  margin: 14px 0;
+  background: var(--border);
+}
+
 .filters {
   display: flex;
   gap: 16px;
@@ -212,6 +284,12 @@ input:focus {
   width: auto;
   margin: 0;
   cursor: pointer;
+}
+
+.filter-hint {
+  color: var(--muted);
+  font-size: 12px;
+  margin-left: 4px;
 }
 
 .actions {

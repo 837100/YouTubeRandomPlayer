@@ -21,6 +21,120 @@ try {
 
 const YT_API = "https://www.googleapis.com/youtube/v3";
 
+/**
+ * 사용자가 입력한 채널 핸들/URL/ID를 서버에서 처리하기 쉬운 형태로 정리합니다.
+ */
+function normalizeChannelInput(value) {
+  const raw = String(value || '').trim();
+
+  if (!raw) {
+    return { raw: '', handle: '', channelId: '', searchQuery: '' };
+  }
+
+  if (/^UC[a-zA-Z0-9_-]{22}$/.test(raw)) {
+    return { raw, handle: '', channelId: raw, searchQuery: raw };
+  }
+
+  try {
+    const url = new URL(raw);
+    const pathParts = url.pathname.split('/').filter(Boolean);
+    const channelIndex = pathParts.indexOf('channel');
+
+    if (channelIndex !== -1 && /^UC[a-zA-Z0-9_-]{22}$/.test(pathParts[channelIndex + 1] || '')) {
+      const channelId = pathParts[channelIndex + 1];
+      return { raw, handle: '', channelId, searchQuery: channelId };
+    }
+
+    const handlePart = pathParts.find((part) => part.startsWith('@'));
+    if (handlePart) {
+      const handle = handlePart.replace(/^@+/, '');
+      return { raw, handle, channelId: '', searchQuery: `@${handle}` };
+    }
+
+    const lastPathPart = pathParts[pathParts.length - 1] || '';
+    const searchQuery = lastPathPart || raw;
+    return {
+      raw,
+      handle: searchQuery.replace(/^@+/, ''),
+      channelId: '',
+      searchQuery
+    };
+  } catch (error) {
+    const handle = raw.replace(/^@+/, '');
+    return {
+      raw,
+      handle,
+      channelId: '',
+      searchQuery: handle ? `@${handle}` : raw
+    };
+  }
+}
+
+/**
+ * YouTube API 응답을 JSON으로 읽고 API 오류를 일반 Error로 올립니다.
+ */
+async function fetchYouTubeJson(url) {
+  const response = await fetch(url);
+  const data = await response.json();
+
+  if (!response.ok || data.error) {
+    const message = data.error?.message || `YouTube API error: ${response.status}`;
+    throw new Error(message);
+  }
+
+  return data;
+}
+
+/**
+ * 채널 ID로 채널 존재 여부를 확인합니다.
+ */
+async function resolveChannelById(channelId) {
+  if (!channelId) return '';
+
+  const data = await fetchYouTubeJson(
+    `${YT_API}/channels?part=id&id=${encodeURIComponent(channelId)}&key=${apiKey}`
+  );
+
+  return data.items?.[0]?.id || '';
+}
+
+/**
+ * YouTube 핸들로 채널 ID를 조회합니다. API가 @ 포함/미포함 중 하나만 받는 경우를 대비해 둘 다 시도합니다.
+ */
+async function resolveChannelByHandle(handle) {
+  if (!handle) return '';
+
+  const candidates = [`@${handle}`, handle];
+
+  for (const candidate of candidates) {
+    try {
+      const data = await fetchYouTubeJson(
+        `${YT_API}/channels?part=id&forHandle=${encodeURIComponent(candidate)}&key=${apiKey}`
+      );
+
+      const channelId = data.items?.[0]?.id;
+      if (channelId) return channelId;
+    } catch (error) {
+      console.error('Handle lookup failed:', error.message);
+    }
+  }
+
+  return '';
+}
+
+/**
+ * 마지막 fallback으로 검색 API를 사용해 채널 ID를 찾습니다.
+ */
+async function resolveChannelBySearch(searchQuery) {
+  if (!searchQuery) return '';
+
+  const data = await fetchYouTubeJson(
+    `${YT_API}/search?part=snippet&type=channel&maxResults=1&q=${encodeURIComponent(searchQuery)}&key=${apiKey}`
+  );
+
+  return data.items?.[0]?.snippet?.channelId || '';
+}
+
 // 채널 ID 해결 엔드포인트
 app.post('/api/resolve-channel', async (req, res) => {
   try {
@@ -30,18 +144,17 @@ app.post('/api/resolve-channel', async (req, res) => {
       return res.status(400).json({ error: '채널 핸들이 필요합니다' });
     }
 
-    const searchQuery = `@${handle}`;
-    const response = await fetch(
-      `${YT_API}/search?part=snippet&type=channel&maxResults=1&q=${encodeURIComponent(searchQuery)}&key=${apiKey}`
-    );
-    
-    const data = await response.json();
-    
-    if (!data.items || data.items.length === 0) {
+    const normalized = normalizeChannelInput(handle);
+
+    const channelId =
+      await resolveChannelById(normalized.channelId) ||
+      await resolveChannelByHandle(normalized.handle) ||
+      await resolveChannelBySearch(normalized.searchQuery);
+
+    if (!channelId) {
       return res.status(404).json({ error: '채널을 찾을 수 없습니다' });
     }
 
-    const channelId = data.items[0].snippet.channelId;
     res.json({ channelId });
   } catch (error) {
     console.error('Error resolving channel:', error);
@@ -108,16 +221,29 @@ app.post('/api/get-playlist-videos', async (req, res) => {
       // 비디오 상세 정보 조회 (duration 및 liveBroadcastContent 확인)
       if (videoIds.length > 0) {
         const videosUrl = 
-          `${YT_API}/videos?part=contentDetails,snippet&id=${encodeURIComponent(videoIds.join(','))}&key=${apiKey}`;
+          `${YT_API}/videos?part=contentDetails,snippet,liveStreamingDetails&id=${encodeURIComponent(videoIds.join(','))}&key=${apiKey}`;
         
         const videosResponse = await fetch(videosUrl);
         const videosData = await videosResponse.json();
         const videoDetailsMap = {};
         
+        if (videosData.error) {
+          console.error('YouTube videos API error:', videosData.error);
+          return res.status(502).json({ error: 'YouTube 영상 상세 정보 조회 중 오류 발생' });
+        }
+
         videosData.items?.forEach(video => {
+          const liveBroadcastContent = video.snippet?.liveBroadcastContent || 'none';
+          const liveStreamingDetails = video.liveStreamingDetails || null;
+
           videoDetailsMap[video.id] = {
             duration: video.contentDetails?.duration,
-            liveBroadcastContent: video.contentDetails?.liveBroadcastContent
+            liveBroadcastContent,
+            liveStreamingDetails,
+            isLiveBroadcast:
+              liveBroadcastContent === 'live' ||
+              liveBroadcastContent === 'upcoming' ||
+              Boolean(liveStreamingDetails)
           };
         });
 
@@ -130,7 +256,9 @@ app.post('/api/get-playlist-videos', async (req, res) => {
             videoId: videoId,
             title: item.snippet?.title || '제목 없음',
             duration: details.duration,
-            liveBroadcastContent: details.liveBroadcastContent
+            liveBroadcastContent: details.liveBroadcastContent || 'none',
+            liveStreamingDetails: details.liveStreamingDetails || null,
+            isLiveBroadcast: details.isLiveBroadcast === true
           });
         });
       } else {
@@ -139,7 +267,9 @@ app.post('/api/get-playlist-videos', async (req, res) => {
             videoId: item.contentDetails?.videoId,
             title: item.snippet?.title || '제목 없음',
             duration: null,
-            liveBroadcastContent: null
+            liveBroadcastContent: 'none',
+            liveStreamingDetails: null,
+            isLiveBroadcast: false
           });
         });
       }
