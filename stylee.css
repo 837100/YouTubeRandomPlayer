@@ -164,6 +164,9 @@ body.cinema .sideCard .btn-secondary {
   color: var(--muted);
   font-size: 14px;
   min-height: 20px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .statusMessage {
