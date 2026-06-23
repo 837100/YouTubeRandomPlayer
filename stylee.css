@@ -22,6 +22,11 @@ body {
   max-width: 900px;
   margin: 0 auto;
   padding: 32px 16px 48px;
+  transition: max-width 0.25s ease;
+}
+
+body.cinema .container {
+  max-width: 1600px;
 }
 
 h1 {
@@ -29,9 +34,127 @@ h1 {
   font-size: 28px;
 }
 
-.desc {
-  margin: 0 0 24px;
+/* ── 상단 바 + 영화관 모드 토글 ───────────────────────── */
+.topbar {
+  max-width: 900px;
+  margin: 0 auto;
+  padding: 24px 16px 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  transition: max-width 0.25s ease;
+}
+
+body.cinema .topbar {
+  max-width: 1600px;
+}
+
+.topbar h1 {
+  margin: 0;
+  font-size: 22px;
+}
+
+.cinemaToggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--card);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 8px 14px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+
+.cinemaToggle:hover {
+  border-color: var(--accent);
+}
+
+.cinemaToggle__icon {
+  display: inline-block;
+  font-size: 11px;
+  transform: translateY(0.5px);
+}
+
+body.cinema .cinemaToggle {
+  background: var(--accent);
+  color: #00111a;
+  border-color: var(--accent);
+}
+
+/* ── 레이아웃 (기본 = 세로 스택, 영화관 = 좌/우) ─────────── */
+.layout {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+body.cinema .layout {
+  display: grid;
+  grid-template-columns: 1fr minmax(180px, 220px);
+  align-items: start;
+  gap: 20px;
+}
+
+.playerCard {
+  margin-bottom: 0;
+}
+
+.sidePanel {
+  display: contents;
+}
+
+body.cinema .sidePanel {
+  display: block;
+  position: sticky;
+  top: 16px;
+}
+
+.sideCard {
+  margin-bottom: 16px;
+}
+
+body.cinema .sideCard {
+  margin-bottom: 0;
+  padding: 14px;
+}
+
+/* ── 영화관 모드에서 우측 패널 폭 압축 ───────────────────── */
+body.cinema .sideCard label {
+  font-size: 12px;
+  margin-bottom: 10px;
+}
+
+body.cinema .sideCard input[type="text"] {
+  width: 100%;
+  padding: 10px 8px;
+  font-size: 13px;
+}
+
+body.cinema .sideCard .filter-item {
+  font-size: 12px;
+}
+
+body.cinema .sideCard .actions {
+  flex-direction: column;
+  gap: 8px;
+}
+
+body.cinema .sideCard .btn-primary,
+body.cinema .sideCard .btn-secondary {
+  width: 100%;
+  padding: 10px 12px;
+  font-size: 13px;
+}
+
+.status {
+  margin-bottom: 14px;
   color: var(--muted);
+  font-size: 14px;
 }
 
 .card {
@@ -41,6 +164,10 @@ h1 {
   padding: 20px;
   margin-bottom: 16px;
   box-shadow: 0 12px 30px rgba(0, 0, 0, 0.25);
+}
+
+.layout .card {
+  margin-bottom: 0;
 }
 
 label {
@@ -106,6 +233,16 @@ button {
 button:disabled {
   opacity: 0.45;
   cursor: not-allowed;
+}
+
+.btn-secondary {
+  background: transparent;
+  color: var(--text);
+  border: 1px solid var(--border);
+}
+
+.btn-secondary:hover:not(:disabled) {
+  border-color: var(--accent);
 }
 
 #status {

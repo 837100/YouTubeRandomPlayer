@@ -5,6 +5,8 @@ const player = document.getElementById("player");
 const randomAgainBtn = document.getElementById("randomAgainBtn");
 const excludeShortsCheckbox = document.getElementById("excludeShortsCheckbox");
 const excludeLiveCheckbox = document.getElementById("excludeLiveCheckbox");
+const cinemaToggleBtn = document.getElementById("cinemaToggleBtn");
+const cinemaToggleLabel = cinemaToggleBtn.querySelector(".cinemaToggle__label");
 
 let currentChannelHandle = "";
 let currentVideoId = "";
@@ -176,4 +178,15 @@ form.addEventListener("submit", async (e) => {
 randomAgainBtn.addEventListener("click", async () => {
   if (!currentChannelHandle) return;
   await loadRandomVideo();
+});
+
+// 영화관 모드 토글
+function setCinemaMode(enabled) {
+  document.body.classList.toggle("cinema", enabled);
+  cinemaToggleBtn.setAttribute("aria-pressed", String(enabled));
+  cinemaToggleLabel.textContent = enabled ? "기본 모드" : "영화관 모드";
+}
+
+cinemaToggleBtn.addEventListener("click", () => {
+  setCinemaMode(!document.body.classList.contains("cinema"));
 });

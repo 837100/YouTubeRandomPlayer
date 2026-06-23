@@ -63,13 +63,17 @@ node server.js
 ### 4. 프론트엔드 실행
 
 > ⚠️ **중요**: `index.html`을 브라우저에서 직접 열면 CORS 문제 등으로 정상 동작하지 않습니다. 반드시 로컬 서버를 통해 실행하세요.
+>
+> ⚠️ **반드시 프로젝트 루트에서 실행**하세요. `servers/` 폴더 안에서 `serve`를 실행하면 `index.html`이 아닌 그 안의 파일 목록이 보입니다. `serve`는 `index.html`을 자동으로 찾아 열도록 설계되어 있으므로, cwd는 `index.html`이 있는 위치여야 합니다.
 
 로컬 서버를 통해 실행 (포트 8000):
 
 ```bash
-npm install -g serve
-serve -s . -p 8000
+# 프로젝트 루트에서
+npx serve -s . -p 8000
 ```
+
+> 💡 포트 8000이 이미 사용 중이면 `serve`가 경고 없이 다른 포트로 자동 폴백합니다. 브라우저 주소창이 비어 보인다면 터미널 출력의 `Accepting connections at http://localhost:XXXXX` 줄에서 실제 포트를 확인하세요.
 
 실행 후 브라우저에서 [http://localhost:8000](http://localhost:8000) 접속
 
