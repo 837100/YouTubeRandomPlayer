@@ -292,23 +292,10 @@ export default {
   async fetch(request, env) {
     const url = new URL(request.url);
     const apiKey = getApiKey(env);
+    const assetFetch = env.ASSETS?.fetch;
 
     if (request.method === 'OPTIONS') {
       return optionsResponse();
-    }
-
-    if (url.pathname === '/' && request.method === 'GET') {
-      return jsonResponse({
-        message: 'YouTube Random Player API Server',
-        status: 'running',
-        apiKeyLoaded: !!apiKey,
-        endpoints: {
-          health: 'GET /api/health',
-          resolveChannel: 'POST /api/resolve-channel',
-          getUploadsPlaylist: 'POST /api/get-uploads-playlist',
-          getPlaylistVideos: 'POST /api/get-playlist-videos'
-        }
-      });
     }
 
     if (url.pathname === '/api/health' && request.method === 'GET') {
@@ -329,6 +316,24 @@ export default {
 
     if (url.pathname === '/api/get-playlist-videos' && request.method === 'POST') {
       return handleGetPlaylistVideos(request, apiKey);
+    }
+
+    if (assetFetch) {
+      return assetFetch(request);
+    }
+
+    if (url.pathname === '/' && request.method === 'GET') {
+      return jsonResponse({
+        message: 'YouTube Random Player API Server',
+        status: 'running',
+        apiKeyLoaded: !!apiKey,
+        endpoints: {
+          health: 'GET /api/health',
+          resolveChannel: 'POST /api/resolve-channel',
+          getUploadsPlaylist: 'POST /api/get-uploads-playlist',
+          getPlaylistVideos: 'POST /api/get-playlist-videos'
+        }
+      });
     }
 
     return jsonResponse({ error: '찾을 수 없는 경로입니다' }, 404);
