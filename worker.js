@@ -292,7 +292,6 @@ export default {
   async fetch(request, env) {
     const url = new URL(request.url);
     const apiKey = getApiKey(env);
-    const assetFetch = env.ASSETS?.fetch;
 
     if (request.method === 'OPTIONS') {
       return optionsResponse();
@@ -318,24 +317,24 @@ export default {
       return handleGetPlaylistVideos(request, apiKey);
     }
 
-    if (assetFetch) {
-      return assetFetch(request);
+    if (env.ASSETS && typeof env.ASSETS.fetch === 'function') {
+      try {
+        return await env.ASSETS.fetch(request);
+      } catch (error) {
+        console.error('ASSETS.fetch failed:', error);
+      }
     }
 
-    if (url.pathname === '/' && request.method === 'GET') {
-      return jsonResponse({
-        message: 'YouTube Random Player API Server',
-        status: 'running',
-        apiKeyLoaded: !!apiKey,
-        endpoints: {
-          health: 'GET /api/health',
-          resolveChannel: 'POST /api/resolve-channel',
-          getUploadsPlaylist: 'POST /api/get-uploads-playlist',
-          getPlaylistVideos: 'POST /api/get-playlist-videos'
-        }
-      });
-    }
-
-    return jsonResponse({ error: '찾을 수 없는 경로입니다' }, 404);
+    return jsonResponse({
+      message: 'YouTube Random Player API Server',
+      status: 'running',
+      apiKeyLoaded: !!apiKey,
+      endpoints: {
+        health: 'GET /api/health',
+        resolveChannel: 'POST /api/resolve-channel',
+        getUploadsPlaylist: 'POST /api/get-uploads-playlist',
+        getPlaylistVideos: 'POST /api/get-playlist-videos'
+      }
+    });
   }
 };
