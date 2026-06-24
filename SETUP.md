@@ -40,7 +40,6 @@ YouTubeRandomPlayer/
 `servers/` 폴더에 `APIKEY.txt` 파일 생성 후 API 키 입력:
 
 ```bash
-mkdir -p servers
 echo "YOUR_API_KEY_HERE" > servers/APIKEY.txt
 ```
 
