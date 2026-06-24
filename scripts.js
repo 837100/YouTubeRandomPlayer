@@ -29,10 +29,33 @@ const CHANNEL_HANDLE_KEY = "channelHandle";
 const PLAYED_VIDEO_IDS_KEY_PREFIX = "playedVideoIds";
 const DEFAULT_STATUS_MESSAGE = "대기 중...";
 
-// 로컬 서버 주소 (로컬: http://localhost:3000, 배포 시 서버 주소로 변경)
-const SERVER_URL = "http://localhost:3000";
-
 const YT_API = "https://www.googleapis.com/youtube/v3";
+
+/**
+ * API 서버의 베이스 URL을 반환합니다.
+ *
+ * @returns {string} API 베이스 URL
+ */
+function getServerUrl() {
+  const configuredUrl = window.__API_BASE_URL__;
+
+  if (typeof configuredUrl === "string") {
+    return configuredUrl.replace(/\/$/, "");
+  }
+
+  return "http://localhost:3000";
+}
+
+/**
+ * API 경로를 절대 URL 또는 상대 URL로 조합합니다.
+ *
+ * @param {string} path API 경로
+ * @returns {string} 요청 URL
+ */
+function apiUrl(path) {
+  const baseUrl = getServerUrl();
+  return baseUrl ? `${baseUrl}${path}` : path;
+}
 
 function setStatus(message) {
   statusEl.textContent = message;
@@ -285,7 +308,7 @@ function getUnplayedCandidates(videos) {
 
 async function resolveChannelId(handle) {
   try {
-    const response = await fetch(`${SERVER_URL}/api/resolve-channel`, {
+    const response = await fetch(apiUrl("/api/resolve-channel"), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ handle })
@@ -308,7 +331,7 @@ async function resolveChannelId(handle) {
 
 async function fetchUploadsPlaylistId(channelId) {
   try {
-    const response = await fetch(`${SERVER_URL}/api/get-uploads-playlist`, {
+    const response = await fetch(apiUrl("/api/get-uploads-playlist"), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ channelId })
@@ -328,7 +351,7 @@ async function fetchUploadsPlaylistId(channelId) {
 
 async function fetchAllVideosFromPlaylist(playlistId, maxTotal = 200) {
   try {
-    const response = await fetch(`${SERVER_URL}/api/get-playlist-videos`, {
+    const response = await fetch(apiUrl("/api/get-playlist-videos"), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ playlistId, maxResults: 50 })
