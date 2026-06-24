@@ -58,7 +58,7 @@
           </div>
         </form>
 
-        
+
         <div class="divider" aria-hidden="true"></div>
 
         <div class="directPlay">
@@ -75,6 +75,55 @@
         </div>
       </aside>
     </div>
+
+    <section class="card gridCard" id="videoGridCard" hidden>
+      <div id="channelBar" class="channelBar" hidden>
+        <img id="channelThumb" class="channelBar__thumb" alt="" />
+        <div class="channelBar__main">
+          <div class="channelBar__titleRow">
+            <span id="channelTitle" class="channelBar__title"></span>
+            <span id="channelHandle" class="channelBar__handle"></span>
+          </div>
+          <div class="channelBar__stats">
+            <span class="channelStat" id="channelStatSubs">구독자 —</span>
+            <span class="channelStat" id="channelStatVideos">영상 —</span>
+            <span class="channelStat" id="channelStatViews">조회수 —</span>
+          </div>
+        </div>
+      </div>
+      <div class="gridCard__head">
+        <h2 class="gridCard__title">업로드 영상</h2>
+        <span id="gridCount" class="gridCard__count"></span>
+      </div>
+      <div id="videoGrid" class="videoGrid" role="list"></div>
+      <div id="videoGridEmpty" class="videoGrid__empty" hidden>
+        필터 조건에 맞는 영상이 없습니다.
+      </div>
+    </section>
+
+    <!-- 쿠팡 파트너스 배너 -->
+    <section class="ad-section" aria-label="쿠팡 파트너스 배너">
+      <div class="ad-card">
+        <div class="ad-card__head">
+          <span class="ad-card__badge">AD</span>
+          <span class="ad-card__title">쿠팡 파트너스</span>
+        </div>
+        <p class="ad-card__notice">아래 배너를 통해 쿠팡에서 구매하시면 저에게 소정의 수수료가 지급됩니다.</p>
+        <div class="ad-card__banner">
+          <script src="https://ads-partners.coupang.com/g.js"></script>
+          <script>
+            new PartnersCoupang.G({
+              "id": 784952,
+              "template": "carousel",
+              "trackingCode": "AF1315244",
+              "width": "100%",
+              "height": "140",
+              "tsource": ""
+            });
+          </script>
+        </div>
+      </div>
+    </section>
   </main>
 
   <script src="config.js"></script>

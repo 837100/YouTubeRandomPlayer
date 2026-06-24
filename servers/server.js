@@ -162,27 +162,82 @@ app.post('/api/resolve-channel', async (req, res) => {
   }
 });
 
+/**
+ * 채널 응답을 클라이언트가 쓰기 좋은 형태로 정규화합니다.
+ */
+function normalizeChannel(channelItem) {
+  const snippet = channelItem.snippet || {};
+  const statistics = channelItem.statistics || {};
+  const branding = channelItem.brandingSettings || {};
+
+  const handle = String(snippet.customUrl || '').replace(/^@+/, '') || '';
+  const thumbnail =
+    branding.image?.bannerExternalUrl ||
+    snippet.thumbnails?.medium?.url ||
+    snippet.thumbnails?.default?.url ||
+    null;
+
+  const hiddenSubscribers = statistics.hiddenSubscriberCount === true;
+  const subscribersRaw = statistics.subscriberCount;
+  const subscribers = hiddenSubscribers
+    ? null
+    : subscribersRaw !== undefined && subscribersRaw !== null && subscribersRaw !== ''
+      ? Number(subscribersRaw)
+      : null;
+
+  const videoCountRaw = statistics.videoCount;
+  const viewCountRaw = statistics.viewCount;
+
+  return {
+    id: channelItem.id || '',
+    title: snippet.title || '',
+    handle,
+    customUrl: snippet.customUrl || '',
+    thumbnail,
+    subscribers,
+    hiddenSubscribers,
+    videoCount: videoCountRaw !== undefined && videoCountRaw !== '' ? Number(videoCountRaw) : null,
+    viewCount: viewCountRaw !== undefined && viewCountRaw !== '' ? Number(viewCountRaw) : null
+  };
+}
+
+/**
+ * 업로드 플레이리스트와 채널 통계를 한 번에 조회합니다.
+ */
+async function fetchUploadsPlaylistAndChannel(channelId) {
+  const data = await fetchYouTubeJson(
+    `${YT_API}/channels?part=contentDetails,snippet,statistics,brandingSettings&id=${encodeURIComponent(channelId)}&key=${apiKey}`
+  );
+
+  if (!data.items || data.items.length === 0) {
+    return null;
+  }
+
+  const item = data.items[0];
+  const uploadsPlaylistId = item.contentDetails?.relatedPlaylists?.uploads;
+  if (!uploadsPlaylistId) {
+    return null;
+  }
+
+  return { uploadsPlaylistId, channel: normalizeChannel(item) };
+}
+
 // Uploads 플레이리스트 ID 조회 엔드포인트
 app.post('/api/get-uploads-playlist', async (req, res) => {
   try {
     const { channelId } = req.body;
-    
+
     if (!channelId) {
       return res.status(400).json({ error: '채널 ID가 필요합니다' });
     }
 
-    const response = await fetch(
-      `${YT_API}/channels?part=contentDetails&id=${encodeURIComponent(channelId)}&key=${apiKey}`
-    );
-    
-    const data = await response.json();
-    
-    if (!data.items || data.items.length === 0) {
+    const result = await fetchUploadsPlaylistAndChannel(channelId);
+
+    if (!result) {
       return res.status(404).json({ error: '채널 정보를 찾을 수 없습니다' });
     }
 
-    const uploadsPlaylistId = data.items[0].contentDetails.relatedPlaylists.uploads;
-    res.json({ uploadsPlaylistId });
+    res.json(result);
   } catch (error) {
     console.error('Error getting uploads playlist:', error);
     res.status(500).json({ error: 'Uploads 플레이리스트 조회 중 오류 발생' });
@@ -251,10 +306,19 @@ app.post('/api/get-playlist-videos', async (req, res) => {
         items.forEach((item) => {
           const videoId = item.contentDetails?.videoId;
           const details = videoDetailsMap[videoId] || {};
-          
+          const itemSnippet = item.snippet || {};
+          const thumbnails = itemSnippet.thumbnails || {};
+
           videos.push({
             videoId: videoId,
-            title: item.snippet?.title || '제목 없음',
+            title: itemSnippet.title || '제목 없음',
+            thumbnail:
+              thumbnails.medium?.url ||
+              thumbnails.default?.url ||
+              thumbnails.high?.url ||
+              null,
+            publishedAt: itemSnippet.publishedAt || null,
+            channelTitle: itemSnippet.channelTitle || '',
             duration: details.duration,
             liveBroadcastContent: details.liveBroadcastContent || 'none',
             liveStreamingDetails: details.liveStreamingDetails || null,
@@ -263,9 +327,19 @@ app.post('/api/get-playlist-videos', async (req, res) => {
         });
       } else {
         items.forEach((item) => {
+          const itemSnippet = item.snippet || {};
+          const thumbnails = itemSnippet.thumbnails || {};
+
           videos.push({
             videoId: item.contentDetails?.videoId,
-            title: item.snippet?.title || '제목 없음',
+            title: itemSnippet.title || '제목 없음',
+            thumbnail:
+              thumbnails.medium?.url ||
+              thumbnails.default?.url ||
+              thumbnails.high?.url ||
+              null,
+            publishedAt: itemSnippet.publishedAt || null,
+            channelTitle: itemSnippet.channelTitle || '',
             duration: null,
             liveBroadcastContent: 'none',
             liveStreamingDetails: null,

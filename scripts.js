@@ -13,8 +13,20 @@ const exclude60sCheckbox = document.getElementById("exclude60sCheckbox");
 const excludeLiveCheckbox = document.getElementById("excludeLiveCheckbox");
 const cinemaToggleBtn = document.getElementById("cinemaToggleBtn");
 const cinemaToggleLabel = cinemaToggleBtn.querySelector(".cinemaToggle__label");
+const channelBar = document.getElementById("channelBar");
+const channelThumb = document.getElementById("channelThumb");
+const channelTitle = document.getElementById("channelTitle");
+const channelHandle = document.getElementById("channelHandle");
+const channelStatSubs = document.getElementById("channelStatSubs");
+const channelStatVideos = document.getElementById("channelStatVideos");
+const channelStatViews = document.getElementById("channelStatViews");
+const videoGridCard = document.getElementById("videoGridCard");
+const videoGrid = document.getElementById("videoGrid");
+const videoGridEmpty = document.getElementById("videoGridEmpty");
+const gridCount = document.getElementById("gridCount");
 
 let currentChannelHandle = "";
+let currentChannel = null;
 let currentVideoId = "";
 let currentVideos = [];
 let isLoading = false;
@@ -127,8 +139,16 @@ function saveChannelHandle(value) {
 function clearChannelInput() {
   channelInput.value = "";
   currentChannelHandle = "";
+  currentChannel = null;
+  currentVideos = [];
   saveChannelHandle("");
   updateClearBtnVisibility();
+  renderChannelBar(null);
+  if (videoGrid) {
+    videoGrid.replaceChildren();
+    videoGridCard.hidden = true;
+  }
+  if (videoGridEmpty) videoGridEmpty.hidden = true;
   setStatus(DEFAULT_STATUS_MESSAGE);
   channelInput.focus();
 }
@@ -329,20 +349,23 @@ async function resolveChannelId(handle) {
   }
 }
 
-async function fetchUploadsPlaylistId(channelId) {
+async function fetchUploadsPlaylist(channelId) {
   try {
     const response = await fetch(apiUrl("/api/get-uploads-playlist"), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ channelId })
     });
-    
+
     if (!response.ok) {
-      throw new Error(`Server error: ${response.status}`);
+      const errorData = await response.json().catch(() => ({}));
+      const error = new Error(errorData.error || `Server error: ${response.status}`);
+      error.status = response.status;
+      throw error;
     }
-    
+
     const data = await response.json();
-    return data.uploadsPlaylistId;
+    return { uploadsPlaylistId: data.uploadsPlaylistId, channel: data.channel || null };
   } catch (error) {
     console.error('Error fetching uploads playlist:', error);
     throw error;
@@ -380,6 +403,202 @@ function playVideo(videoId) {
   // randomAgainBtn.disabled = false;
 }
 
+/**
+ * 큰 숫자를 한국어 단위로 줄여 표기합니다.
+ *
+ * @param {number | null | undefined} value 원본 숫자
+ * @returns {string} 포맷된 문자열
+ */
+function formatStatNumber(value) {
+  if (value === null || value === undefined || Number.isNaN(value)) return "—";
+  const n = Number(value);
+  if (n < 1000) return String(n);
+  if (n < 10000) return n.toLocaleString("ko-KR");
+  if (n < 100000000) {
+    const man = n / 10000;
+    return `${man.toFixed(man >= 100 ? 0 : 1)}만`;
+  }
+  const eok = n / 100000000;
+  return `${eok.toFixed(eok >= 100 ? 0 : 1)}억`;
+}
+
+/**
+ * 초 단위 길이를 카드용 짧은 표기로 바꿉니다.
+ *
+ * @param {number | null | undefined} seconds 초 단위 길이
+ * @returns {string} 포맷된 문자열
+ */
+function formatDurationShort(seconds) {
+  if (!seconds || Number.isNaN(seconds)) return "";
+  if (seconds <= 60) return "Shorts";
+  const total = Math.floor(seconds);
+  const hours = Math.floor(total / 3600);
+  const minutes = Math.floor((total % 3600) / 60);
+  const secs = total % 60;
+  const pad = (n) => String(n).padStart(2, "0");
+  return hours > 0 ? `${hours}:${pad(minutes)}:${pad(secs)}` : `${minutes}:${pad(secs)}`;
+}
+
+/**
+ * 채널 통계 바를 그립니다.
+ *
+ * @param {{
+ *   id: string,
+ *   title: string,
+ *   handle: string,
+ *   customUrl: string,
+ *   thumbnail: string | null,
+ *   subscribers: number | null,
+ *   hiddenSubscribers: boolean,
+ *   videoCount: number | null,
+ *   viewCount: number | null
+ * } | null} channel 정규화된 채널 정보
+ */
+function renderChannelBar(channel) {
+  if (!channel || !channel.id) {
+    channelBar.hidden = true;
+    return;
+  }
+
+  if (channel.thumbnail) {
+    channelThumb.src = channel.thumbnail;
+    channelThumb.alt = `${channel.title || "채널"} 썸네일`;
+    channelThumb.hidden = false;
+  } else {
+    channelThumb.removeAttribute("src");
+    channelThumb.alt = "";
+    channelThumb.hidden = true;
+  }
+
+  channelTitle.textContent = channel.title || "채널 정보 없음";
+
+  if (channel.handle) {
+    channelHandle.textContent = `@${channel.handle}`;
+    channelHandle.hidden = false;
+  } else if (channel.customUrl) {
+    channelHandle.textContent = channel.customUrl;
+    channelHandle.hidden = false;
+  } else {
+    channelHandle.textContent = "";
+    channelHandle.hidden = true;
+  }
+
+  channelStatSubs.textContent = channel.hiddenSubscribers
+    ? "구독자 비공개"
+    : `구독자 ${formatStatNumber(channel.subscribers)}`;
+
+  channelStatVideos.textContent = `영상 ${formatStatNumber(channel.videoCount)}`;
+  channelStatViews.textContent = `조회수 ${formatStatNumber(channel.viewCount)}`;
+
+  channelBar.hidden = false;
+}
+
+/**
+ * 현재 영상 목록에 체크박스 필터를 적용해 표시할 항목만 돌려줍니다.
+ *
+ * @param {Array<any>} videos 전체 영상 목록
+ * @returns {Array<any>} 필터링된 영상 목록
+ */
+function applyGridFilters(videos) {
+  return videos.filter((video) => {
+    if (exclude60sCheckbox.checked && isUnder60s(video)) return false;
+    if (excludeLiveCheckbox.checked && isLive(video)) return false;
+    return true;
+  });
+}
+
+/**
+ * 비디오 그리드를 그립니다. 필터 변경 시에도 그대로 재호출됩니다.
+ */
+function renderVideoGrid() {
+  if (!currentVideos.length) {
+    videoGrid.replaceChildren();
+    videoGridCard.hidden = true;
+    return;
+  }
+
+  const filtered = applyGridFilters(currentVideos);
+  const fragments = document.createDocumentFragment();
+
+  filtered.forEach((video) => {
+    const card = document.createElement("button");
+    card.type = "button";
+    card.className = "videoCard";
+    card.setAttribute("role", "listitem");
+    card.dataset.videoId = video.videoId;
+
+    const thumbWrap = document.createElement("div");
+    thumbWrap.className = "videoCard__thumbWrap";
+
+    if (video.thumbnail) {
+      const img = document.createElement("img");
+      img.className = "videoCard__thumb";
+      img.src = video.thumbnail;
+      img.alt = video.title || "영상 썸네일";
+      img.loading = "lazy";
+      thumbWrap.appendChild(img);
+    } else {
+      const placeholder = document.createElement("div");
+      placeholder.className = "videoCard__thumb videoCard__thumb--placeholder";
+      placeholder.textContent = "썸네일 없음";
+      thumbWrap.appendChild(placeholder);
+    }
+
+    const seconds = parseDuration(video.duration);
+    const durationLabel = formatDurationShort(seconds);
+    if (durationLabel) {
+      const badge = document.createElement("span");
+      const isShorts = durationLabel === "Shorts";
+      badge.className = isShorts ? "videoCard__duration videoCard__duration--shorts" : "videoCard__duration";
+      badge.textContent = durationLabel;
+      thumbWrap.appendChild(badge);
+    }
+
+    if (isLive(video)) {
+      const liveBadge = document.createElement("span");
+      liveBadge.className = "videoCard__liveBadge";
+      liveBadge.textContent = "LIVE";
+      thumbWrap.appendChild(liveBadge);
+    }
+
+    const title = document.createElement("div");
+    title.className = "videoCard__title";
+    title.textContent = video.title || "제목 없음";
+    title.title = video.title || "제목 없음";
+
+    card.appendChild(thumbWrap);
+    card.appendChild(title);
+    fragments.appendChild(card);
+  });
+
+  videoGrid.replaceChildren(fragments);
+  videoGridCard.hidden = false;
+  videoGridEmpty.hidden = filtered.length > 0;
+  gridCount.textContent = filtered.length === currentVideos.length
+    ? `총 ${currentVideos.length}개`
+    : `표시 ${filtered.length} / ${currentVideos.length}개`;
+}
+
+/**
+ * 비디오 카드를 클릭했을 때 해당 영상을 바로 재생합니다.
+ *
+ * @param {string} videoId 재생할 영상 ID
+ * @param {string} title 상태 표시용 제목
+ */
+function playVideoFromGrid(videoId, title) {
+  if (isLoading) {
+    setStatus("현재 영상이 로드 중입니다. 잠시만 기다려주세요.");
+    return;
+  }
+
+  isLoading = true;
+  setPlaybackControlsLoading(true, PLAY_URL_BTN_LOADING_LABEL);
+  currentVideoId = videoId;
+  savePlayedVideoId(videoId);
+  playVideo(videoId);
+  setStatus(`재생 중: ${title}`);
+}
+
 async function loadRandomVideo() {
   // 코드 레벨 중복 호출 가드
   if (isLoading) return;
@@ -397,7 +616,9 @@ async function loadRandomVideo() {
     }
 
     setStatus("영상 목록 불러오는 중...");
-    const uploadsPlaylistId = await fetchUploadsPlaylistId(channelId);
+    const { uploadsPlaylistId, channel } = await fetchUploadsPlaylist(channelId);
+    currentChannel = channel;
+    renderChannelBar(channel);
 
     if (!uploadsPlaylistId) {
       setStatus("업로드 재생목록을 찾을 못했습니다.");
@@ -406,6 +627,7 @@ async function loadRandomVideo() {
 
     const videos = await fetchAllVideosFromPlaylist(uploadsPlaylistId);
     currentVideos = videos;
+    renderVideoGrid();
 
     if (!videos.length) {
       setStatus("재생할 영상을 찾지 못했습니다.");
@@ -477,6 +699,24 @@ clearChannelBtn.addEventListener("click", clearChannelInput);
 playUrlBtn.addEventListener("click", playVideoFromUrl);
 player.addEventListener("load", () => {
   finishPlaybackLoading();
+});
+
+// 비디오 그리드 클릭 → 즉시 재생
+videoGrid.addEventListener("click", (event) => {
+  const card = event.target.closest(".videoCard");
+  if (!card) return;
+  const videoId = card.dataset.videoId;
+  if (!videoId) return;
+  const title = card.querySelector(".videoCard__title")?.textContent || "제목 없음";
+  playVideoFromGrid(videoId, title);
+});
+
+// 필터 체크박스 변화에 그리드만 다시 그림 (랜덤 재생 다시 호출 X)
+exclude60sCheckbox.addEventListener("change", () => {
+  if (currentVideos.length) renderVideoGrid();
+});
+excludeLiveCheckbox.addEventListener("change", () => {
+  if (currentVideos.length) renderVideoGrid();
 });
 
 // "다른 랜덤 영상" 버튼은 사용하지 않음
