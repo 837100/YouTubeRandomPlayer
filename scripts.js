@@ -939,3 +939,17 @@ try {
 }
 updateClearBtnVisibility();
 updateClearVideoUrlBtnVisibility();
+
+document.addEventListener("keydown", (e) => {
+  if (e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA") return;
+
+  if (e.key === "f" || e.key === "F" || e.key === "ㄹ") {
+    e.preventDefault();
+
+    if (!document.fullscreenElement) {
+      player.requestFullscreen().catch(() => { });
+    } else {
+      document.exitFullscreen().catch(() => { });
+    }
+  }
+});
