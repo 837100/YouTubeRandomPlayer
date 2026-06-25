@@ -13,8 +13,6 @@ const exclude60sCheckbox = document.getElementById("exclude60sCheckbox");
 const excludeLiveCheckbox = document.getElementById("excludeLiveCheckbox");
 const cinemaToggleBtn = document.getElementById("cinemaToggleBtn");
 const cinemaToggleLabel = cinemaToggleBtn.querySelector(".cinemaToggle__label");
-const watchStatsBtn = document.getElementById("watchStatsBtn");
-const watchStatsToday = document.getElementById("watchStatsToday");
 const channelBar = document.getElementById("channelBar");
 const channelThumb = document.getElementById("channelThumb");
 const channelTitle = document.getElementById("channelTitle");
@@ -42,7 +40,13 @@ const CINEMA_MODE_KEY = "cinemaMode";
 const CHANNEL_HANDLE_KEY = "channelHandle";
 const PLAYED_VIDEO_IDS_KEY_PREFIX = "playedVideoIds";
 const DEFAULT_STATUS_MESSAGE = "대기 중...";
-const WATCH_BADGE_REFRESH_MS = 1000;
+const AUTOPLAY_DELAY_SEC = 3;
+
+const autoPlayToggleBtn = document.getElementById("autoPlayToggleBtn");
+const autoPlayToggleLabel = autoPlayToggleBtn.querySelector(".autoPlayToggle__label");
+
+let autoPlayEnabled = false;
+let autoPlayTimeoutId = null;
 
 const YT_API = "https://www.googleapis.com/youtube/v3";
 
@@ -397,6 +401,7 @@ async function fetchAllVideosFromPlaylist(playlistId, maxTotal = 200) {
 
 function playVideo(videoId) {
   currentVideoId = videoId;
+  clearAutoPlayTimeout();
   if (playerLoadTimeoutId) {
     clearTimeout(playerLoadTimeoutId);
   }
@@ -405,9 +410,6 @@ function playVideo(videoId) {
   // "다른 랜덤 영상" 버튼은 사용하지 않음
   // randomAgainBtn.disabled = false;
 
-  if (window.WatchTime) {
-    window.WatchTime.attachToPlayer(player);
-  }
 }
 
 /**
@@ -498,11 +500,6 @@ function renderChannelBar(channel) {
   channelStatViews.textContent = `조회수 ${formatStatNumber(channel.viewCount)}`;
 
   channelBar.hidden = false;
-
-  if (window.WatchTime && (channel.handle || channel.customUrl)) {
-    const handleValue = channel.handle || channel.customUrl.replace(/^@+/, "");
-    window.WatchTime.recordChannelPlay(handleValue);
-  }
 }
 
 /**
@@ -612,6 +609,7 @@ function playVideoFromGrid(videoId, title) {
 }
 
 async function loadRandomVideo() {
+  clearAutoPlayTimeout();
   // 코드 레벨 중복 호출 가드
   if (isLoading) return;
   isLoading = true;
@@ -762,6 +760,61 @@ try {
   // localStorage 접근 실패 시 기본 모드로 시작
 }
 
+// ── 자동 재생 ────────────────────────────────────────────
+function handleVideoEnded() {
+  if (!autoPlayEnabled || !currentChannelHandle || isLoading) return;
+
+  let countdown = AUTOPLAY_DELAY_SEC;
+  setStatus(`자동 재생: ${countdown}초 후 다음 영상 재생...`);
+  autoPlayTimeoutId = setInterval(() => {
+    countdown--;
+    if (countdown > 0) {
+      setStatus(`자동 재생: ${countdown}초 후 다음 영상 재생...`);
+    } else {
+      clearInterval(autoPlayTimeoutId);
+      autoPlayTimeoutId = null;
+      loadRandomVideo();
+    }
+  }, 1000);
+}
+
+function clearAutoPlayTimeout() {
+  if (autoPlayTimeoutId) {
+    clearInterval(autoPlayTimeoutId);
+    autoPlayTimeoutId = null;
+  }
+}
+
+function setAutoPlay(enabled) {
+  autoPlayEnabled = enabled;
+  autoPlayToggleBtn.setAttribute("aria-pressed", String(enabled));
+  autoPlayToggleLabel.textContent = enabled ? "자동 재생 켜짐" : "자동 재생";
+  if (!enabled) {
+    clearAutoPlayTimeout();
+    if (!isLoading) {
+      setStatus(DEFAULT_STATUS_MESSAGE);
+    }
+  }
+}
+
+// YouTube iframe postMessage로 영상 종료 감지 (onStateChange=0)
+window.addEventListener("message", (event) => {
+  if (event.origin !== "https://www.youtube.com") return;
+
+  try {
+    const data = typeof event.data === "string" ? JSON.parse(event.data) : event.data;
+    if (data && data.event === "onStateChange" && data.info === 0) {
+      handleVideoEnded();
+    }
+  } catch (error) {
+    // JSON이 아닌 메시지는 무시
+  }
+});
+
+autoPlayToggleBtn.addEventListener("click", () => {
+  setAutoPlay(!autoPlayEnabled);
+});
+
 // 페이지 로드 시 채널 핸들 복원
 try {
   const savedHandle = localStorage.getItem(CHANNEL_HANDLE_KEY);
@@ -774,26 +827,3 @@ try {
 }
 updateClearBtnVisibility();
 updateClearVideoUrlBtnVisibility();
-
-// ── 시청 시간 추적 / 시각화 통합 ──────────────────────────
-function refreshWatchBadge() {
-  if (!watchStatsToday || !window.WatchTime) return;
-  const seconds = window.WatchTime.getTodayTotal();
-  watchStatsToday.textContent = window.WatchTime.formatDuration(seconds);
-}
-
-if (window.WatchTime) {
-  window.WatchTime.init();
-  refreshWatchBadge();
-  setInterval(refreshWatchBadge, WATCH_BADGE_REFRESH_MS);
-}
-
-if (window.WatchChart) {
-  window.WatchChart.init();
-}
-
-if (watchStatsBtn) {
-  watchStatsBtn.addEventListener("click", () => {
-    if (window.WatchChart) window.WatchChart.open();
-  });
-}
