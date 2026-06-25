@@ -562,23 +562,17 @@ body.cinema .channelStat {
 
 .gridCard__head {
   display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 12px;
-  margin-bottom: 14px;
+  align-items: center;
+  gap: 8px;
 }
 
 .gridCard__title {
-  margin: 0;
-  font-size: 16px;
-  font-weight: 700;
-  color: var(--text);
+  flex: 1; /* 제목이 남은 공간을 모두 차지 → 카운트+버튼을 오른쪽으로 밀어냄 */
 }
 
 .gridCard__count {
-  color: var(--muted);
-  font-size: 12px;
-  font-weight: 500;
+  /* flex: 1 제거 또는 없으면 그대로 */
+  white-space: nowrap;
 }
 
 .videoGrid {

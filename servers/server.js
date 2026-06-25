@@ -139,7 +139,7 @@ async function resolveChannelBySearch(searchQuery) {
 app.post('/api/resolve-channel', async (req, res) => {
   try {
     const { handle } = req.body;
-    
+
     if (!handle) {
       return res.status(400).json({ error: '채널 핸들이 필요합니다' });
     }
@@ -257,112 +257,64 @@ app.post('/api/get-uploads-playlist', async (req, res) => {
 // 플레이리스트 영상 조회 엔드포인트
 app.post('/api/get-playlist-videos', async (req, res) => {
   try {
-    const { playlistId, maxResults = 50 } = req.body;
-    
+    const { playlistId, maxResults = 50, pageToken = '' } = req.body; // ← pageToken 추가
+
     if (!playlistId) {
       return res.status(400).json({ error: '플레이리스트 ID가 필요합니다' });
     }
 
+    const url =
+      `${YT_API}/playlistItems?part=snippet,contentDetails&playlistId=${encodeURIComponent(playlistId)}` +
+      `&maxResults=${maxResults}&key=${apiKey}` +
+      (pageToken ? `&pageToken=${encodeURIComponent(pageToken)}` : '');
+
+    const data = await fetchYouTubeJson(url);
+    const items = data.items || [];
     const videos = [];
-    let pageToken = '';
-    const maxTotal = 200;
 
-    while (videos.length < maxTotal) {
-      const url = 
-        `${YT_API}/playlistItems?part=snippet,contentDetails&playlistId=${encodeURIComponent(playlistId)}` +
-        `&maxResults=${maxResults}&key=${apiKey}` +
-        (pageToken ? `&pageToken=${encodeURIComponent(pageToken)}` : '');
+    const videoIds = items.map((item) => item.contentDetails?.videoId).filter(Boolean);
 
-      const response = await fetch(url);
-      const data = await response.json();
-      
-      const items = data.items || [];
-      
-      // 비디오 ID 수집
-      const videoIds = items
-        .map((item) => item.contentDetails?.videoId)
-        .filter(Boolean);
+    if (videoIds.length > 0) {
+      const videosData = await fetchYouTubeJson(
+        `${YT_API}/videos?part=contentDetails,snippet,liveStreamingDetails&id=${encodeURIComponent(videoIds.join(','))}&key=${apiKey}`
+      );
+      const videoDetailsMap = {};
 
-      // 비디오 상세 정보 조회 (duration 및 liveBroadcastContent 확인)
-      if (videoIds.length > 0) {
-        const videosUrl = 
-          `${YT_API}/videos?part=contentDetails,snippet,liveStreamingDetails&id=${encodeURIComponent(videoIds.join(','))}&key=${apiKey}`;
-        
-        const videosResponse = await fetch(videosUrl);
-        const videosData = await videosResponse.json();
-        const videoDetailsMap = {};
-        
-        if (videosData.error) {
-          console.error('YouTube videos API error:', videosData.error);
-          return res.status(502).json({ error: 'YouTube 영상 상세 정보 조회 중 오류 발생' });
-        }
+      videosData.items?.forEach((video) => {
+        const liveBroadcastContent = video.snippet?.liveBroadcastContent || 'none';
+        const liveStreamingDetails = video.liveStreamingDetails || null;
+        videoDetailsMap[video.id] = {
+          duration: video.contentDetails?.duration,
+          liveBroadcastContent,
+          liveStreamingDetails,
+          isLiveBroadcast: liveBroadcastContent === 'live' || liveBroadcastContent === 'upcoming' || Boolean(liveStreamingDetails)
+        };
+      });
 
-        videosData.items?.forEach(video => {
-          const liveBroadcastContent = video.snippet?.liveBroadcastContent || 'none';
-          const liveStreamingDetails = video.liveStreamingDetails || null;
-
-          videoDetailsMap[video.id] = {
-            duration: video.contentDetails?.duration,
-            liveBroadcastContent,
-            liveStreamingDetails,
-            isLiveBroadcast:
-              liveBroadcastContent === 'live' ||
-              liveBroadcastContent === 'upcoming' ||
-              Boolean(liveStreamingDetails)
-          };
+      items.forEach((item) => {
+        const videoId = item.contentDetails?.videoId;
+        const details = videoDetailsMap[videoId] || {};
+        const itemSnippet = item.snippet || {};
+        const thumbnails = itemSnippet.thumbnails || {};
+        videos.push({
+          videoId,
+          title: itemSnippet.title || '제목 없음',
+          thumbnail: thumbnails.medium?.url || thumbnails.default?.url || thumbnails.high?.url || null,
+          publishedAt: itemSnippet.publishedAt || null,
+          channelTitle: itemSnippet.channelTitle || '',
+          duration: details.duration,
+          liveBroadcastContent: details.liveBroadcastContent || 'none',
+          liveStreamingDetails: details.liveStreamingDetails || null,
+          isLiveBroadcast: details.isLiveBroadcast === true
         });
-
-        // 비디오 정보와 상세 정보 결합
-        items.forEach((item) => {
-          const videoId = item.contentDetails?.videoId;
-          const details = videoDetailsMap[videoId] || {};
-          const itemSnippet = item.snippet || {};
-          const thumbnails = itemSnippet.thumbnails || {};
-
-          videos.push({
-            videoId: videoId,
-            title: itemSnippet.title || '제목 없음',
-            thumbnail:
-              thumbnails.medium?.url ||
-              thumbnails.default?.url ||
-              thumbnails.high?.url ||
-              null,
-            publishedAt: itemSnippet.publishedAt || null,
-            channelTitle: itemSnippet.channelTitle || '',
-            duration: details.duration,
-            liveBroadcastContent: details.liveBroadcastContent || 'none',
-            liveStreamingDetails: details.liveStreamingDetails || null,
-            isLiveBroadcast: details.isLiveBroadcast === true
-          });
-        });
-      } else {
-        items.forEach((item) => {
-          const itemSnippet = item.snippet || {};
-          const thumbnails = itemSnippet.thumbnails || {};
-
-          videos.push({
-            videoId: item.contentDetails?.videoId,
-            title: itemSnippet.title || '제목 없음',
-            thumbnail:
-              thumbnails.medium?.url ||
-              thumbnails.default?.url ||
-              thumbnails.high?.url ||
-              null,
-            publishedAt: itemSnippet.publishedAt || null,
-            channelTitle: itemSnippet.channelTitle || '',
-            duration: null,
-            liveBroadcastContent: 'none',
-            liveStreamingDetails: null,
-            isLiveBroadcast: false
-          });
-        });
-      }
-
-      pageToken = data.nextPageToken;
-      if (!pageToken || videos.length >= maxTotal) break;
+      });
     }
 
-    res.json({ videos: videos.slice(0, maxTotal) });
+    // ← nextPageToken을 클라이언트에 반환
+    res.json({
+      videos,
+      nextPageToken: data.nextPageToken || null
+    });
   } catch (error) {
     console.error('Error getting playlist videos:', error);
     res.status(500).json({ error: '영상 목록 조회 중 오류 발생' });
@@ -371,7 +323,7 @@ app.post('/api/get-playlist-videos', async (req, res) => {
 
 // 루트 경로 - 서버 상태 안내
 app.get('/', (req, res) => {
-  res.json({ 
+  res.json({
     message: 'YouTube Random Player API Server',
     status: 'running',
     apiKeyLoaded: !!apiKey,

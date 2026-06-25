@@ -29,6 +29,8 @@ let currentChannelHandle = "";
 let currentChannel = null;
 let currentVideoId = "";
 let currentVideos = [];
+let currentPlaylistId = "";
+let currentNextPageToken = null;
 let isLoading = false;
 let playerLoadTimeoutId = null;
 const LOAD_BTN_DEFAULT_LABEL = "랜덤 영상 재생";
@@ -401,24 +403,17 @@ async function fetchUploadsPlaylist(channelId) {
   }
 }
 
-async function fetchAllVideosFromPlaylist(playlistId, maxTotal = 200) {
-  try {
-    const response = await fetch(apiUrl("/api/get-playlist-videos"), {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ playlistId, maxResults: 50 })
-    });
+async function fetchAllVideosFromPlaylist(playlistId, pageToken = '') {
+  const response = await fetch(apiUrl("/api/get-playlist-videos"), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ playlistId, maxResults: 50, pageToken })
+  });
 
-    if (!response.ok) {
-      throw new Error(`Server error: ${response.status}`);
-    }
+  if (!response.ok) throw new Error(`Server error: ${response.status}`);
 
-    const data = await response.json();
-    return data.videos;
-  } catch (error) {
-    console.error('Error fetching playlist videos:', error);
-    throw error;
-  }
+  const data = await response.json();
+  return { videos: data.videos, nextPageToken: data.nextPageToken || null };
 }
 
 // ── YouTube embed iframe 직접 postMessage 통신 ──────────────────────────
@@ -697,8 +692,11 @@ function renderVideoGrid() {
   videoGridCard.hidden = false;
   videoGridEmpty.hidden = filtered.length > 0;
   gridCount.textContent = filtered.length === currentVideos.length
-    ? `총 ${currentVideos.length}개 (최대 200개 표시)`
+    ? `총 ${currentVideos.length}개`
     : `표시 ${filtered.length} / ${currentVideos.length}개`;
+
+  const moreBtn = document.getElementById("loadMoreBtn");
+  if (moreBtn) moreBtn.hidden = !currentNextPageToken;
 }
 
 /**
@@ -741,6 +739,7 @@ async function loadRandomVideo() {
     setStatus("영상 목록 불러오는 중...");
     const { uploadsPlaylistId, channel } = await fetchUploadsPlaylist(channelId);
     currentChannel = channel;
+    currentPlaylistId = uploadsPlaylistId; // ← 저장
     renderChannelBar(channel);
 
     if (!uploadsPlaylistId) {
@@ -748,8 +747,9 @@ async function loadRandomVideo() {
       return;
     }
 
-    const videos = await fetchAllVideosFromPlaylist(uploadsPlaylistId);
+    const { videos, nextPageToken } = await fetchAllVideosFromPlaylist(uploadsPlaylistId);
     currentVideos = videos;
+    currentNextPageToken = nextPageToken; // ← 저장
     renderVideoGrid();
 
     if (!videos.length) {
@@ -920,6 +920,29 @@ function setAutoPlay(enabled) {
   }
 }
 
+async function loadMoreVideos() {
+  if (!currentPlaylistId || !currentNextPageToken || isLoading) return;
+
+  isLoading = true;
+  const moreBtn = document.getElementById("loadMoreBtn");
+  if (moreBtn) moreBtn.disabled = true;
+
+  try {
+    const { videos, nextPageToken } = await fetchAllVideosFromPlaylist(currentPlaylistId, currentNextPageToken);
+    currentVideos = [...currentVideos, ...videos];
+    currentNextPageToken = nextPageToken;
+    renderVideoGrid();
+  } catch (error) {
+    console.error(error);
+  } finally {
+    isLoading = false;
+    if (moreBtn) {
+      moreBtn.disabled = false;
+      moreBtn.hidden = !currentNextPageToken; // 더 없으면 숨김
+    }
+  }
+}
+
 // YouTube 영상 종료 감지는 embed iframe의 postMessage를 통해 수행됩니다.
 // (window "message" 이벤트 핸들러 참조)
 
@@ -953,3 +976,5 @@ document.addEventListener("keydown", (e) => {
     }
   }
 });
+
+document.getElementById("loadMoreBtn").addEventListener("click", loadMoreVideos);
