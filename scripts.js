@@ -47,6 +47,28 @@ const autoPlayToggleLabel = autoPlayToggleBtn.querySelector(".autoPlayToggle__la
 
 let autoPlayEnabled = false;
 let autoPlayTimeoutId = null;
+let isHandlingVideoEnd = false; // 다음 랜덤 영상 무한 로딩 방지
+
+// YouTube embed iframe postMessage 통신용 상수
+const YT_STATE_ENDED = 0;
+const YT_STATE_PLAYING = 1;
+
+const YT_STATE_UNSTARTED = -1;
+
+// YouTube embed 오류 코드
+const YT_ERROR_INVALID_PARAM = 2;
+const YT_ERROR_HTML5_PLAYER = 5;
+const YT_ERROR_VIDEO_NOT_FOUND = 100;
+const YT_ERROR_EMBEDDING_NOT_ALLOWED = 101;
+const YT_ERROR_EMBEDDING_NOT_ALLOWED_ALT = 150;
+
+const YT_ERROR_MESSAGES = {
+  2: "잘못된 매개변수입니다.",
+  5: "HTML5 플레이어 오류입니다.",
+  100: "삭제/비공개 처리된 영상입니다.",
+  101: "외부 사이트 재생이 제한된 영상입니다.",
+  150: "외부 사이트 재생이 제한된 영상입니다."
+};
 
 const YT_API = "https://www.googleapis.com/youtube/v3";
 
@@ -233,16 +255,16 @@ function playVideoFromUrl() {
 // ISO 8601 duration을 초 단위로 변환 (예: PT10M30S -> 630)
 function parseDuration(duration) {
   if (!duration) return 0;
-  
+
   const regex = /PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?/;
   const match = duration.match(regex);
-  
+
   if (!match) return 0;
-  
+
   const hours = parseInt(match[1]) || 0;
   const minutes = parseInt(match[2]) || 0;
   const seconds = parseInt(match[3]) || 0;
-  
+
   return hours * 3600 + minutes * 60 + seconds;
 }
 
@@ -340,14 +362,14 @@ async function resolveChannelId(handle) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ handle })
     });
-    
+
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}));
       const error = new Error(errorData.error || `Server error: ${response.status}`);
       error.status = response.status;
       throw error;
     }
-    
+
     const data = await response.json();
     return data.channelId;
   } catch (error) {
@@ -386,11 +408,11 @@ async function fetchAllVideosFromPlaylist(playlistId, maxTotal = 200) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ playlistId, maxResults: 50 })
     });
-    
+
     if (!response.ok) {
       throw new Error(`Server error: ${response.status}`);
     }
-    
+
     const data = await response.json();
     return data.videos;
   } catch (error) {
@@ -399,6 +421,93 @@ async function fetchAllVideosFromPlaylist(playlistId, maxTotal = 200) {
   }
 }
 
+// ── YouTube embed iframe 직접 postMessage 통신 ──────────────────────────
+// YouTube IFrame API(www-widgetapi.js)는 HTTP 환경에서 origin을
+// 강제로 HTTPS로 바꿔 postMessage 통신이 불가하므로 사용하지 않습니다.
+// 대신 embed iframe에 직접 "listening" 명령을 보내 상태 변경 이벤트를 수신합니다.
+
+/**
+ * iframe이 로드된 후 YouTube embed에 "listening" 명령을 보내
+ * 상태 변경 이벤트 수신을 시작합니다.
+ */
+function sendListeningCommand() {
+  try {
+    if (player.contentWindow) {
+      player.contentWindow.postMessage(
+        JSON.stringify({ event: "listening", id: "player", channel: "widget" }),
+        "https://www.youtube.com"
+      );
+    }
+  } catch (error) {
+    // cross-origin 접근 에러 무시
+  }
+}
+
+/**
+ * YouTube embed에서 onError 이벤트가 발생했을 때 처리합니다.
+ *
+ * @param {number} errorCode YouTube embed 오류 코드
+ */
+function handleVideoError(errorCode) {
+  finishPlaybackLoading();
+
+  const message = YT_ERROR_MESSAGES[errorCode] || "알 수 없는 오류로 영상을 재생할 수 없습니다.";
+  setStatus(`⚠️ ${message}`);
+
+  if (autoPlayEnabled && currentChannelHandle) {
+    setStatus(`⚠️ ${message} - 자동으로 다음 영상을 불러옵니다...`);
+    setTimeout(() => loadRandomVideo(), 2000);
+  }
+}
+
+/**
+ * YouTube embed iframe의 postMessage 이벤트를 수신해
+ * 영상 상태 변경(재생 시작/종료) 및 오류를 감지합니다.
+ */
+window.addEventListener("message", (event) => {
+  if (!event.origin || !event.origin.endsWith("youtube.com")) return;
+
+  try {
+    const data = typeof event.data === "string" ? JSON.parse(event.data) : event.data;
+    if (!data || typeof data !== "object") return;
+
+    // ✅ infoDelivery 이벤트에서도 playerState를 감지
+    if (data.event === "infoDelivery" && data.info && typeof data.info.playerState === "number") {
+      const state = data.info.playerState;
+      if (state === YT_STATE_PLAYING) {
+        finishPlaybackLoading();
+      }
+      if (state === YT_STATE_ENDED) {
+        handleVideoEnded();
+      }
+      return;
+    }
+
+    // 기존 onStateChange도 유지 (혹시 오는 경우 대비)
+    if (data.event === "onStateChange") {
+      if (data.info === YT_STATE_PLAYING) {
+        finishPlaybackLoading();
+      }
+      if (data.info === YT_STATE_ENDED) {
+        handleVideoEnded();
+      }
+      return;
+    }
+
+    if (data.event === "onError") {
+      handleVideoError(data.info);
+      return;
+    }
+  } catch (error) {
+    // JSON이 아닌 메시지는 무시
+  }
+});
+
+/**
+ * 지정한 videoId를 iframe에 로드하고 재생합니다.
+ *
+ * @param {string} videoId YouTube 영상 ID
+ */
 function playVideo(videoId) {
   currentVideoId = videoId;
   clearAutoPlayTimeout();
@@ -406,10 +515,14 @@ function playVideo(videoId) {
     clearTimeout(playerLoadTimeoutId);
   }
   playerLoadTimeoutId = setTimeout(finishPlaybackLoading, PLAYER_LOAD_TIMEOUT_MS);
-  player.src = `https://www.youtube.com/embed/${videoId}?autoplay=1&rel=0&controls=1&enablejsapi=1&modestbranding=1`;
-  // "다른 랜덤 영상" 버튼은 사용하지 않음
-  // randomAgainBtn.disabled = false;
 
+  const origin = encodeURIComponent(window.location.origin);
+  player.src = `https://www.youtube.com/embed/${videoId}?autoplay=1&rel=0&controls=1&enablejsapi=1&modestbranding=1&origin=${origin}&widget_referrer=${origin}`;
+
+  // ✅ src 변경 후 iframe이 새로 로드되므로 listening 커맨드를 다시 예약
+  // (기존 player load 이벤트의 sendListeningCommand와 함께 동작)
+  setTimeout(sendListeningCommand, 1000);
+  setTimeout(sendListeningCommand, 2500);
 }
 
 /**
@@ -709,6 +822,10 @@ clearChannelBtn.addEventListener("click", clearChannelInput);
 playUrlBtn.addEventListener("click", playVideoFromUrl);
 player.addEventListener("load", () => {
   finishPlaybackLoading();
+  // iframe 로드 완료 후 listening 명령을 보내 상태 이벤트 수신 시작
+  // 약간의 지연을 두어 iframe 내부 초기화 완료를 기다림
+  setTimeout(sendListeningCommand, 500);
+  setTimeout(sendListeningCommand, 1500);
 });
 
 // 비디오 그리드 클릭 → 즉시 재생
@@ -762,7 +879,11 @@ try {
 
 // ── 자동 재생 ────────────────────────────────────────────
 function handleVideoEnded() {
+  // ✅ 이미 처리 중이면 즉시 리턴
+  if (isHandlingVideoEnd) return;
   if (!autoPlayEnabled || !currentChannelHandle || isLoading) return;
+
+  isHandlingVideoEnd = true; // ← 플래그 설정
 
   let countdown = AUTOPLAY_DELAY_SEC;
   setStatus(`자동 재생: ${countdown}초 후 다음 영상 재생...`);
@@ -773,6 +894,7 @@ function handleVideoEnded() {
     } else {
       clearInterval(autoPlayTimeoutId);
       autoPlayTimeoutId = null;
+      isHandlingVideoEnd = false; // ← 플래그 해제
       loadRandomVideo();
     }
   }, 1000);
@@ -783,6 +905,7 @@ function clearAutoPlayTimeout() {
     clearInterval(autoPlayTimeoutId);
     autoPlayTimeoutId = null;
   }
+  isHandlingVideoEnd = false; // ← 플래그 해제
 }
 
 function setAutoPlay(enabled) {
@@ -797,19 +920,8 @@ function setAutoPlay(enabled) {
   }
 }
 
-// YouTube iframe postMessage로 영상 종료 감지 (onStateChange=0)
-window.addEventListener("message", (event) => {
-  if (event.origin !== "https://www.youtube.com") return;
-
-  try {
-    const data = typeof event.data === "string" ? JSON.parse(event.data) : event.data;
-    if (data && data.event === "onStateChange" && data.info === 0) {
-      handleVideoEnded();
-    }
-  } catch (error) {
-    // JSON이 아닌 메시지는 무시
-  }
-});
+// YouTube 영상 종료 감지는 embed iframe의 postMessage를 통해 수행됩니다.
+// (window "message" 이벤트 핸들러 참조)
 
 autoPlayToggleBtn.addEventListener("click", () => {
   setAutoPlay(!autoPlayEnabled);
