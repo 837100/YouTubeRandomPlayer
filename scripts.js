@@ -13,6 +13,8 @@ const exclude60sCheckbox = document.getElementById("exclude60sCheckbox");
 const excludeLiveCheckbox = document.getElementById("excludeLiveCheckbox");
 const cinemaToggleBtn = document.getElementById("cinemaToggleBtn");
 const cinemaToggleLabel = cinemaToggleBtn.querySelector(".cinemaToggle__label");
+const watchStatsBtn = document.getElementById("watchStatsBtn");
+const watchStatsToday = document.getElementById("watchStatsToday");
 const channelBar = document.getElementById("channelBar");
 const channelThumb = document.getElementById("channelThumb");
 const channelTitle = document.getElementById("channelTitle");
@@ -40,6 +42,7 @@ const CINEMA_MODE_KEY = "cinemaMode";
 const CHANNEL_HANDLE_KEY = "channelHandle";
 const PLAYED_VIDEO_IDS_KEY_PREFIX = "playedVideoIds";
 const DEFAULT_STATUS_MESSAGE = "대기 중...";
+const WATCH_BADGE_REFRESH_MS = 1000;
 
 const YT_API = "https://www.googleapis.com/youtube/v3";
 
@@ -401,6 +404,10 @@ function playVideo(videoId) {
   player.src = `https://www.youtube.com/embed/${videoId}?autoplay=1&rel=0&controls=1&enablejsapi=1&modestbranding=1`;
   // "다른 랜덤 영상" 버튼은 사용하지 않음
   // randomAgainBtn.disabled = false;
+
+  if (window.WatchTime) {
+    window.WatchTime.attachToPlayer(player);
+  }
 }
 
 /**
@@ -491,6 +498,11 @@ function renderChannelBar(channel) {
   channelStatViews.textContent = `조회수 ${formatStatNumber(channel.viewCount)}`;
 
   channelBar.hidden = false;
+
+  if (window.WatchTime && (channel.handle || channel.customUrl)) {
+    const handleValue = channel.handle || channel.customUrl.replace(/^@+/, "");
+    window.WatchTime.recordChannelPlay(handleValue);
+  }
 }
 
 /**
@@ -762,3 +774,26 @@ try {
 }
 updateClearBtnVisibility();
 updateClearVideoUrlBtnVisibility();
+
+// ── 시청 시간 추적 / 시각화 통합 ──────────────────────────
+function refreshWatchBadge() {
+  if (!watchStatsToday || !window.WatchTime) return;
+  const seconds = window.WatchTime.getTodayTotal();
+  watchStatsToday.textContent = window.WatchTime.formatDuration(seconds);
+}
+
+if (window.WatchTime) {
+  window.WatchTime.init();
+  refreshWatchBadge();
+  setInterval(refreshWatchBadge, WATCH_BADGE_REFRESH_MS);
+}
+
+if (window.WatchChart) {
+  window.WatchChart.init();
+}
+
+if (watchStatsBtn) {
+  watchStatsBtn.addEventListener("click", () => {
+    if (window.WatchChart) window.WatchChart.open();
+  });
+}
