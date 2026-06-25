@@ -587,7 +587,7 @@ function renderVideoGrid() {
   videoGridCard.hidden = false;
   videoGridEmpty.hidden = filtered.length > 0;
   gridCount.textContent = filtered.length === currentVideos.length
-    ? `총 ${currentVideos.length}개`
+    ? `총 ${currentVideos.length}개 (최대 200개 표시)`
     : `표시 ${filtered.length} / ${currentVideos.length}개`;
 }
 
