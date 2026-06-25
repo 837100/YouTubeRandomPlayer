@@ -717,6 +717,7 @@ function playVideoFromGrid(videoId, title) {
   savePlayedVideoId(videoId);
   playVideo(videoId);
   setStatus(`재생 중: ${title}`);
+  window.scrollTo({ top: 0, behavior: "smooth" }); // 영상 재생 시 상단으로 스크롤
 }
 
 async function loadRandomVideo() {
