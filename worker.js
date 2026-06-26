@@ -275,100 +275,63 @@ async function handleGetUploadsPlaylist(request, apiKey) {
  * @returns {Promise<Response>} 응답
  */
 async function handleGetPlaylistVideos(request, apiKey) {
-  const { playlistId, maxResults = 50 } = await readJsonBody(request);
+  const { playlistId, maxResults = 50, pageToken = '' } = await readJsonBody(request);
 
   if (!playlistId) {
     return jsonResponse({ error: '플레이리스트 ID가 필요합니다' }, 400);
   }
 
+  const url =
+    `${YT_API}/playlistItems?part=snippet,contentDetails&playlistId=${encodeURIComponent(playlistId)}` +
+    `&maxResults=${maxResults}&key=${apiKey}` +
+    (pageToken ? `&pageToken=${encodeURIComponent(pageToken)}` : '');
+
+  const data = await fetchYouTubeJson(url);
+  const items = data.items || [];
   const videos = [];
-  let pageToken = '';
-  const maxTotal = 200;
-  const pageSize = Math.max(1, Math.min(Number(maxResults) || 50, 50));
 
-  while (videos.length < maxTotal) {
-    const url =
-      `${YT_API}/playlistItems?part=snippet,contentDetails&playlistId=${encodeURIComponent(playlistId)}` +
-      `&maxResults=${pageSize}&key=${apiKey}` +
-      (pageToken ? `&pageToken=${encodeURIComponent(pageToken)}` : '');
+  const videoIds = items.map((item) => item.contentDetails?.videoId).filter(Boolean);
 
-    const data = await fetchYouTubeJson(url);
-    const items = data.items || [];
-    const videoIds = items
-      .map((item) => item.contentDetails?.videoId)
-      .filter(Boolean);
+  if (videoIds.length > 0) {
+    const videosData = await fetchYouTubeJson(
+      `${YT_API}/videos?part=contentDetails,snippet,liveStreamingDetails&id=${encodeURIComponent(videoIds.join(','))}&key=${apiKey}`
+    );
+    const videoDetailsMap = {};
 
-    if (videoIds.length > 0) {
-      const videosData = await fetchYouTubeJson(
-        `${YT_API}/videos?part=contentDetails,snippet,liveStreamingDetails&id=${encodeURIComponent(videoIds.join(','))}&key=${apiKey}`
-      );
-      const videoDetailsMap = {};
+    videosData.items?.forEach((video) => {
+      const liveBroadcastContent = video.snippet?.liveBroadcastContent || 'none';
+      const liveStreamingDetails = video.liveStreamingDetails || null;
+      videoDetailsMap[video.id] = {
+        duration: video.contentDetails?.duration,
+        liveBroadcastContent,
+        liveStreamingDetails,
+        isLiveBroadcast: liveBroadcastContent === 'live' || liveBroadcastContent === 'upcoming' || Boolean(liveStreamingDetails)
+      };
+    });
 
-      videosData.items?.forEach((video) => {
-        const liveBroadcastContent = video.snippet?.liveBroadcastContent || 'none';
-        const liveStreamingDetails = video.liveStreamingDetails || null;
-
-        videoDetailsMap[video.id] = {
-          duration: video.contentDetails?.duration,
-          liveBroadcastContent,
-          liveStreamingDetails,
-          isLiveBroadcast:
-            liveBroadcastContent === 'live' ||
-            liveBroadcastContent === 'upcoming' ||
-            Boolean(liveStreamingDetails)
-        };
+    items.forEach((item) => {
+      const videoId = item.contentDetails?.videoId;
+      const details = videoDetailsMap[videoId] || {};
+      const itemSnippet = item.snippet || {};
+      const thumbnails = itemSnippet.thumbnails || {};
+      videos.push({
+        videoId,
+        title: itemSnippet.title || '제목 없음',
+        thumbnail: thumbnails.medium?.url || thumbnails.default?.url || thumbnails.high?.url || null,
+        publishedAt: itemSnippet.publishedAt || null,
+        channelTitle: itemSnippet.channelTitle || '',
+        duration: details.duration,
+        liveBroadcastContent: details.liveBroadcastContent || 'none',
+        liveStreamingDetails: details.liveStreamingDetails || null,
+        isLiveBroadcast: details.isLiveBroadcast === true
       });
-
-      items.forEach((item) => {
-        const videoId = item.contentDetails?.videoId;
-        const details = videoDetailsMap[videoId] || {};
-        const itemSnippet = item.snippet || {};
-        const thumbnails = itemSnippet.thumbnails || {};
-
-        videos.push({
-          videoId,
-          title: itemSnippet.title || '제목 없음',
-          thumbnail:
-            thumbnails.medium?.url ||
-            thumbnails.default?.url ||
-            thumbnails.high?.url ||
-            null,
-          publishedAt: itemSnippet.publishedAt || null,
-          channelTitle: itemSnippet.channelTitle || '',
-          duration: details.duration,
-          liveBroadcastContent: details.liveBroadcastContent || 'none',
-          liveStreamingDetails: details.liveStreamingDetails || null,
-          isLiveBroadcast: details.isLiveBroadcast === true
-        });
-      });
-    } else {
-      items.forEach((item) => {
-        const itemSnippet = item.snippet || {};
-        const thumbnails = itemSnippet.thumbnails || {};
-
-        videos.push({
-          videoId: item.contentDetails?.videoId,
-          title: itemSnippet.title || '제목 없음',
-          thumbnail:
-            thumbnails.medium?.url ||
-            thumbnails.default?.url ||
-            thumbnails.high?.url ||
-            null,
-          publishedAt: itemSnippet.publishedAt || null,
-          channelTitle: itemSnippet.channelTitle || '',
-          duration: null,
-          liveBroadcastContent: 'none',
-          liveStreamingDetails: null,
-          isLiveBroadcast: false
-        });
-      });
-    }
-
-    pageToken = data.nextPageToken;
-    if (!pageToken || videos.length >= maxTotal) break;
+    });
   }
 
-  return jsonResponse({ videos: videos.slice(0, maxTotal) });
+  return jsonResponse({
+    videos,
+    nextPageToken: data.nextPageToken || null
+  });
 }
 
 /**
