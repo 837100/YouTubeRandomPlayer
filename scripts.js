@@ -11,6 +11,14 @@ const loadVideoBtn = document.getElementById("loadVideoBtn");
 // const randomAgainBtn = document.getElementById("randomAgainBtn");
 const exclude60sCheckbox = document.getElementById("exclude60sCheckbox");
 const excludeLiveCheckbox = document.getElementById("excludeLiveCheckbox");
+const exclude60sFilterGroup = document.getElementById("exclude60sFilterGroup");
+const excludeLiveFilterGroup = document.getElementById("excludeLiveFilterGroup");
+const minViewCountInput = document.getElementById("minViewCountInput");
+const maxViewCountInput = document.getElementById("maxViewCountInput");
+const viewCountError = document.getElementById("viewCountError");
+const viewCountToggleBtn = document.getElementById("viewCountToggleBtn");
+const viewCountFilterGroup = document.getElementById("viewCountFilterGroup");
+const viewCountFilterBody = document.getElementById("viewCountFilterBody");
 const cinemaToggleBtn = document.getElementById("cinemaToggleBtn");
 const cinemaToggleLabel = cinemaToggleBtn.querySelector(".cinemaToggle__label");
 const channelBar = document.getElementById("channelBar");
@@ -43,6 +51,11 @@ const CHANNEL_HANDLE_KEY = "channelHandle";
 const PLAYED_VIDEO_IDS_KEY_PREFIX = "playedVideoIds";
 const DEFAULT_STATUS_MESSAGE = "대기 중...";
 const AUTOPLAY_DELAY_SEC = 3;
+
+/**
+ * 조회수 범위 필터 토글 상태. true면 입력 칸이 활성화되고 필터가 적용됩니다.
+ */
+let viewCountFilterEnabled = false;
 
 const autoPlayToggleBtn = document.getElementById("autoPlayToggleBtn");
 const autoPlayToggleLabel = autoPlayToggleBtn.querySelector(".autoPlayToggle__label");
@@ -288,17 +301,9 @@ function isLive(video) {
   );
 }
 
-// 체크박스 설정에 따라 영상 필터링
+// 체크박스 설정과 조회수 범위에 따라 영상 필터링
 function filterVideos(videos) {
-  return videos.filter(video => {
-    if (exclude60sCheckbox.checked && isUnder60s(video)) {
-      return false;
-    }
-    if (excludeLiveCheckbox.checked && isLive(video)) {
-      return false;
-    }
-    return true;
-  });
+  return videos.filter(passesFilters);
 }
 
 /**
@@ -611,17 +616,90 @@ function renderChannelBar(channel) {
 }
 
 /**
- * 현재 영상 목록에 체크박스 필터를 적용해 표시할 항목만 돌려줍니다.
+ * 입력된 조회수 문자열을 정수로 변환합니다.
+ *
+ * - 빈 값 / 숫자 아님 / 음수 → null (필터 없음)
+ *
+ * @param {string} value 입력 칸의 문자열
+ * @returns {number | null} 조회수 또는 null
+ */
+function parseViewCount(value) {
+  if (value === undefined || value === null) return null;
+  const trimmed = String(value).trim();
+  if (trimmed === "") return null;
+  if (!/^\d+$/.test(trimmed)) return null;
+  const n = Number(trimmed);
+  return Number.isFinite(n) && n >= 0 ? n : null;
+}
+
+/**
+ * 현재 입력 칸들의 조회수 범위를 읽어옵니다.
+ *
+ * @returns {{ min: number | null, max: number | null }} 범위
+ */
+function getViewCountRange() {
+  return {
+    min: parseViewCount(minViewCountInput.value),
+    max: parseViewCount(maxViewCountInput.value)
+  };
+}
+
+/**
+ * 현재 입력값이 유효한지 검증하고 한국어 오류 메시지를 돌려줍니다.
+ *
+ * @returns {{ valid: boolean, error: string }} 검증 결과
+ */
+function validateViewCountRange() {
+  const rawMin = minViewCountInput.value.trim();
+  const rawMax = maxViewCountInput.value.trim();
+
+  if (rawMin !== "" && !/^\d+$/.test(rawMin)) {
+    return { valid: false, error: "최소 조회수는 정수로 입력해 주세요." };
+  }
+  if (rawMax !== "" && !/^\d+$/.test(rawMax)) {
+    return { valid: false, error: "최대 조회수는 정수로 입력해 주세요." };
+  }
+
+  const { min, max } = getViewCountRange();
+  if (min !== null && max !== null && min > max) {
+    return { valid: false, error: "최소 조회수가 최대 조회수보다 큽니다." };
+  }
+
+  return { valid: true, error: "" };
+}
+
+/**
+ * 단일 필터 predicate. 랜덤 재생과 그리드 렌더링이 같은 규칙을 공유하도록 합니다.
+ *
+ * - 호출 시점에 입력값을 다시 읽어, 실시간 필터 변경에 자동으로 반응합니다.
+ * - 조회수 범위는 토글이 켜져 있을 때만 적용됩니다.
+ *
+ * @param {any} video 영상 객체
+ * @returns {boolean} 표시 대상이면 true
+ */
+function passesFilters(video) {
+  if (exclude60sCheckbox.checked && isUnder60s(video)) return false;
+  if (excludeLiveCheckbox.checked && isLive(video)) return false;
+
+  if (!viewCountFilterEnabled) return true;
+
+  const { min, max } = getViewCountRange();
+  const vc = video.viewCount;
+
+  if (min !== null && (vc === null || vc < min)) return false;
+  if (max !== null && (vc === null || vc > max)) return false;
+
+  return true;
+}
+
+/**
+ * 현재 영상 목록에 체크박스 필터와 조회수 범위를 적용해 표시할 항목만 돌려줍니다.
  *
  * @param {Array<any>} videos 전체 영상 목록
  * @returns {Array<any>} 필터링된 영상 목록
  */
 function applyGridFilters(videos) {
-  return videos.filter((video) => {
-    if (exclude60sCheckbox.checked && isUnder60s(video)) return false;
-    if (excludeLiveCheckbox.checked && isLive(video)) return false;
-    return true;
-  });
+  return videos.filter(passesFilters);
 }
 
 /**
@@ -683,8 +761,13 @@ function renderVideoGrid() {
     title.textContent = video.title || "제목 없음";
     title.title = video.title || "제목 없음";
 
+    const views = document.createElement("div");
+    views.className = "videoCard__views";
+    views.textContent = `조회수 ${formatStatNumber(video.viewCount)}`;
+
     card.appendChild(thumbWrap);
     card.appendChild(title);
+    card.appendChild(views);
     fragments.appendChild(card);
   });
 
@@ -801,6 +884,12 @@ form.addEventListener("submit", async (e) => {
     return;
   }
 
+  const validation = validateViewCountRange();
+  if (!validation.valid) {
+    setStatus("조회수 범위를 올바르게 입력하세요.");
+    return;
+  }
+
   saveChannelHandle(currentChannelHandle);
   await loadRandomVideo();
 });
@@ -839,12 +928,87 @@ videoGrid.addEventListener("click", (event) => {
   playVideoFromGrid(videoId, title);
 });
 
-// 필터 체크박스 변화에 그리드만 다시 그림 (랜덤 재생 다시 호출 X)
+// 체크박스 필터 변화에 그리드만 다시 그림 (랜덤 재생 다시 호출 X) + 박스 흐림 동기화
 exclude60sCheckbox.addEventListener("change", () => {
+  exclude60sFilterGroup.classList.toggle("is-disabled", !exclude60sCheckbox.checked);
   if (currentVideos.length) renderVideoGrid();
 });
 excludeLiveCheckbox.addEventListener("change", () => {
+  excludeLiveFilterGroup.classList.toggle("is-disabled", !excludeLiveCheckbox.checked);
   if (currentVideos.length) renderVideoGrid();
+});
+
+/**
+ * 조회수 범위 입력 변경 시 검증 → 인라인 경고 → 제출 버튼 잠금.
+ *
+ * - 영상 목록은 즉시 재렌더하지 않습니다. 다음 "랜덤 영상 재생" 클릭 시 적용됩니다.
+ * - 체크박스 필터와 달리, 입력 중에는 그저 검증 피드백만 갱신합니다.
+ * - "최소 조회수가 최대 조회수보다 큽니다" 같이 양쪽 비교 메시지는 양쪽 입력 모두
+ *   빨간 테두리로 표시하는 것이 직관적이므로 `error.includes("최소")` 만 검사합니다.
+ */
+function onViewCountInputChange() {
+  // 토글이 꺼져 있으면 입력 자체가 disabled 라 이벤트가 거의 발생하지 않지만,
+  // 키보드/IME 등 일부 환경에서 호출될 수 있으므로 명시적으로 무시합니다.
+  if (!viewCountFilterEnabled) return;
+
+  const result = validateViewCountRange();
+
+  [minViewCountInput, maxViewCountInput].forEach((el) => {
+    el.classList.remove("is-invalid");
+  });
+
+  if (result.valid) {
+    viewCountError.hidden = true;
+    viewCountError.textContent = "";
+    loadVideoBtn.disabled = false;
+  } else {
+    viewCountError.hidden = false;
+    viewCountError.textContent = result.error;
+    if (result.error.includes("최소")) minViewCountInput.classList.add("is-invalid");
+    if (result.error.includes("최대")) maxViewCountInput.classList.add("is-invalid");
+    loadVideoBtn.disabled = true;
+  }
+}
+
+/**
+ * 조회수 범위 토글 상태를 적용합니다.
+ *
+ * - 입력 칸의 disabled 속성 동기화
+ * - 박스 영역 흐림 효과(is-disabled) 동기화
+ * - 토글 스위치의 aria-checked / 시각 상태 갱신
+ * - 본문 표시/숨김
+ * - 토글 OFF 시 기존 입력값 검증 메시지/빨간 테두리 초기화
+ *
+ * @param {boolean} enabled 토글 ON/OFF
+ */
+function setViewCountFilterEnabled(enabled) {
+  viewCountFilterEnabled = enabled;
+
+  viewCountToggleBtn.setAttribute("aria-checked", String(enabled));
+  viewCountFilterGroup.classList.toggle("is-disabled", !enabled);
+  viewCountFilterBody.hidden = !enabled;
+  minViewCountInput.disabled = !enabled;
+  maxViewCountInput.disabled = !enabled;
+
+  if (!enabled) {
+    // OFF 시 기존 에러 상태/빨간 테두리 정리
+    viewCountError.hidden = true;
+    viewCountError.textContent = "";
+    [minViewCountInput, maxViewCountInput].forEach((el) => el.classList.remove("is-invalid"));
+    loadVideoBtn.disabled = false;
+  }
+}
+
+viewCountToggleBtn.addEventListener("click", () => {
+  setViewCountFilterEnabled(!viewCountFilterEnabled);
+});
+
+// 초기 상태 적용 (HTML 기본 disabled/aria-checked="false" 와 동기화)
+setViewCountFilterEnabled(false);
+
+[minViewCountInput, maxViewCountInput].forEach((el) => {
+  el.addEventListener("input", onViewCountInputChange);
+  el.addEventListener("change", onViewCountInputChange);
 });
 
 // "다른 랜덤 영상" 버튼은 사용하지 않음

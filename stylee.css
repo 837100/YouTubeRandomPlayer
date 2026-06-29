@@ -334,6 +334,251 @@ body.cinema .sideCard .clearBtn {
   margin-left: 4px;
 }
 
+/* ── 조회수 범위 필터 그룹 ───────────────────────────── */
+.filterGroups {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 0 0 16px;
+}
+
+.filter-group {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 0;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: rgba(11, 18, 32, 0.6);
+  min-width: 0;
+}
+
+.filter-group[disabled],
+.filter-group.is-disabled {
+  opacity: 0.55;
+}
+
+.filter-group.is-disabled .filter-group__title,
+.filter-group.is-disabled .filter-group__legend,
+.filter-group.is-disabled .filter-group__legendRow,
+.filter-group.is-disabled .filter-hint,
+.filter-group.is-disabled .filter-group__label,
+.filter-group.is-disabled .filter-group__desc {
+  color: var(--muted);
+}
+
+.filter-group.is-disabled .filter-group__switch,
+.filter-group.is-disabled .filter-group__switchLabel {
+  cursor: not-allowed;
+}
+
+.filter-group.is-disabled .filter-group__number {
+  cursor: not-allowed;
+}
+
+.filter-group__legend {
+  padding: 0 6px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.filter-group__legendRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 6px;
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.filter-group__title {
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.filter-group__desc {
+  margin: 0;
+  padding: 0 4px 0 46px; /* 토글(약 36px) + gap(10px) 만큼 들여쓰기 */
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.filter-group__body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding-left: 46px; /* 토글 + gap 만큼 들여쓰기 */
+}
+
+.filter-group__body[hidden] {
+  display: none;
+}
+
+/* ON/OFF 스위치 (조회수 범위 + Shorts/Live 공용) ─ */
+.filter-group__switchLabel {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  cursor: pointer;
+  padding: 0;
+  margin: 0;
+}
+
+.filter-group__switchInput {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.filter-group__switchInput:focus-visible + .filter-group__switch {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.filter-group__switch {
+  position: relative;
+  flex: 0 0 auto;
+  display: inline-block;
+  width: 36px;
+  height: 20px;
+  padding: 0;
+  border-radius: 999px;
+  border: 0;
+  background: #1f2937;
+  cursor: pointer;
+  font: inherit;
+  color: inherit;
+  transition: background 0.15s ease;
+}
+
+.filter-group__switch[aria-checked="true"],
+.filter-group__switchInput:checked + .filter-group__switch {
+  background: var(--accent);
+}
+
+.filter-group__switchThumb {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #e5e7eb;
+  transition: transform 0.15s ease, background 0.15s ease;
+}
+
+.filter-group__switch[aria-checked="true"] .filter-group__switchThumb,
+.filter-group__switchInput:checked + .filter-group__switch .filter-group__switchThumb {
+  transform: translateX(16px);
+  background: #00111a;
+}
+
+.filter-group__switch:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.filter-group__row {
+  display: grid;
+  grid-template-columns: 44px 1fr;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.filter-group__label {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+  text-align: right;
+}
+
+.filter-group__inputWrap {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 6px;
+  min-width: 0;
+}
+
+.filter-group__number {
+  width: 100%;
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: #0b1220;
+  color: var(--text);
+  outline: none;
+  font-size: 14px;
+}
+
+.filter-group__number:focus {
+  border-color: var(--accent);
+}
+
+.filter-group__number.is-invalid {
+  border-color: #f87171;
+  box-shadow: 0 0 0 1px rgba(248, 113, 113, 0.25);
+}
+
+.filter-group__error {
+  margin: 0;
+  padding: 0 4px;
+  color: #fca5a5;
+  font-size: 12px;
+}
+
+.filter-group__error[hidden] {
+  display: none;
+}
+
+body.cinema .filter-group {
+  padding: 10px;
+}
+
+body.cinema .filter-group__title,
+body.cinema .filter-group__legend,
+body.cinema .filter-group__legendRow {
+  font-size: 12px;
+}
+
+body.cinema .filter-group__desc,
+body.cinema .filter-group__label,
+body.cinema .filter-group__number {
+  font-size: 12px;
+}
+
+/* ── 그리드 카드: 조회수 라인 ─────────────────────────── */
+.videoCard__views {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1.3;
+  display: -webkit-box;
+  -webkit-line-clamp: 1;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  word-break: break-word;
+}
+
+body.cinema .videoCard__views {
+  font-size: 12px;
+}
+
 .actions {
   display: flex;
   gap: 10px;

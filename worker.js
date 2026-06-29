@@ -37,6 +37,21 @@ function getApiKey(env) {
 }
 
 /**
+ * 문자열로 들어온 숫자 통계를 Number | null 로 정규화합니다.
+ *
+ * 빈 문자열 / null / undefined / 숫자가 아닌 값은 null 로 반환하여
+ * 클라이언트가 "조회수 없음" 상태로 안전하게 처리할 수 있게 합니다.
+ *
+ * @param {unknown} raw YouTube API가 반환한 통계 값
+ * @returns {number | null} 정수 또는 null
+ */
+function parseStatCount(raw) {
+  if (raw === undefined || raw === null || raw === "") return null;
+  const n = Number(raw);
+  return Number.isFinite(n) ? n : null;
+}
+
+/**
  * YouTube API 응답을 JSON으로 읽고 API 오류를 일반 Error로 올립니다.
  *
  * @param {string} url 요청 URL
@@ -294,7 +309,7 @@ async function handleGetPlaylistVideos(request, apiKey) {
 
   if (videoIds.length > 0) {
     const videosData = await fetchYouTubeJson(
-      `${YT_API}/videos?part=contentDetails,snippet,liveStreamingDetails&id=${encodeURIComponent(videoIds.join(','))}&key=${apiKey}`
+      `${YT_API}/videos?part=contentDetails,snippet,liveStreamingDetails,statistics&id=${encodeURIComponent(videoIds.join(','))}&key=${apiKey}`
     );
     const videoDetailsMap = {};
 
@@ -305,7 +320,8 @@ async function handleGetPlaylistVideos(request, apiKey) {
         duration: video.contentDetails?.duration,
         liveBroadcastContent,
         liveStreamingDetails,
-        isLiveBroadcast: liveBroadcastContent === 'live' || liveBroadcastContent === 'upcoming' || Boolean(liveStreamingDetails)
+        isLiveBroadcast: liveBroadcastContent === 'live' || liveBroadcastContent === 'upcoming' || Boolean(liveStreamingDetails),
+        viewCount: parseStatCount(video.statistics?.viewCount)
       };
     });
 
@@ -323,7 +339,8 @@ async function handleGetPlaylistVideos(request, apiKey) {
         duration: details.duration,
         liveBroadcastContent: details.liveBroadcastContent || 'none',
         liveStreamingDetails: details.liveStreamingDetails || null,
-        isLiveBroadcast: details.isLiveBroadcast === true
+        isLiveBroadcast: details.isLiveBroadcast === true,
+        viewCount: details.viewCount ?? null
       });
     });
   }

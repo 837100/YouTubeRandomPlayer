@@ -48,15 +48,59 @@
             </div>
           </label>
 
-          <div class="filters">
-            <label class="filter-item">
-              <input type="checkbox" id="exclude60sCheckbox" />
-              60초 이하 영상 제외 <span class="filter-hint">(≈Shorts)</span>
-            </label>
-            <label class="filter-item">
-              <input type="checkbox" id="excludeLiveCheckbox" />
-              Live 영상 제외
-            </label>
+          <div class="filterGroups">
+            <fieldset class="filter-group filter-group--shorts is-disabled" id="exclude60sFilterGroup">
+              <legend class="filter-group__legendRow">
+                <label class="filter-group__switchLabel">
+                  <input type="checkbox" id="exclude60sCheckbox" class="filter-group__switchInput" />
+                  <span class="filter-group__switch" aria-hidden="true">
+                    <span class="filter-group__switchThumb"></span>
+                  </span>
+                </label>
+                <span class="filter-group__title">60초 이하 영상 제외</span>
+                <span class="filter-hint">(≈Shorts)</span>
+              </legend>
+              <p class="filter-group__desc">Shorts와 같은 60초 이하 영상을 제외합니다.</p>
+            </fieldset>
+
+            <fieldset class="filter-group filter-group--live is-disabled" id="excludeLiveFilterGroup">
+              <legend class="filter-group__legendRow">
+                <label class="filter-group__switchLabel">
+                  <input type="checkbox" id="excludeLiveCheckbox" class="filter-group__switchInput" />
+                  <span class="filter-group__switch" aria-hidden="true">
+                    <span class="filter-group__switchThumb"></span>
+                  </span>
+                </label>
+                <span class="filter-group__title">Live 영상 제외</span>
+              </legend>
+              <p class="filter-group__desc">현재 방송 중이거나 예정된 Live 방송을 제외합니다.</p>
+            </fieldset>
+
+            <fieldset class="filter-group filter-group--viewCount is-disabled" id="viewCountFilterGroup">
+              <legend class="filter-group__legendRow">
+                <button type="button" id="viewCountToggleBtn" class="filter-group__switch"
+                  role="switch" aria-checked="false" aria-controls="viewCountFilterBody">
+                  <span class="filter-group__switchThumb" aria-hidden="true"></span>
+                </button>
+                <span class="filter-group__title">조회수 범위</span>
+              </legend>
+
+              <div id="viewCountFilterBody" class="filter-group__body" hidden>
+                <div class="filter-group__row">
+                  <label class="filter-group__label" for="minViewCountInput">최소</label>
+                  <input id="minViewCountInput" class="filter-group__number" type="number" inputmode="numeric"
+                    min="0" step="1" placeholder="예: 10000" disabled />
+                </div>
+
+                <div class="filter-group__row">
+                  <label class="filter-group__label" for="maxViewCountInput">최대</label>
+                  <input id="maxViewCountInput" class="filter-group__number" type="number" inputmode="numeric"
+                    min="0" step="1" placeholder="예: 500000" disabled />
+                </div>
+
+                <p id="viewCountError" class="filter-group__error" hidden></p>
+              </div>
+            </fieldset>
           </div>
 
           <div class="actions">
