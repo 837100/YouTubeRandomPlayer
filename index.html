@@ -37,11 +37,21 @@
       </section>
 
       <aside class="sidePanel">
-        <form id="creatorForm" class="card sideCard">
+        <form id="creatorForm" class="card sideCard" novalidate>
 
 
           <label>
-            YouTube 채널 핸들 (@없이 입력)
+            최신 영상 개수 <span class="requiredMark" aria-label="필수 입력">*</span>
+            <div class="inputWrap">
+              <input id="videoCountInput" type="number" inputmode="numeric" min="1" max="200" step="1"
+                value="50" placeholder="예: 50 (1~200)" aria-describedby="videoCountError" />
+            </div>
+            <p class="inputHint">업로드일 최신 순으로 가져올 영상 개수 (랜덤 추첨 범위)</p>
+            <p id="videoCountError" class="filter-group__error" hidden></p>
+          </label>
+
+          <label>
+            YouTube 채널 핸들 (@없이 입력) <span class="requiredMark" aria-label="필수 입력">*</span>
             <div class="inputWrap">
               <input id="channelInput" type="text" placeholder="creatorname" required />
               <button type="button" id="clearChannelBtn" class="clearBtn" aria-label="입력 지우기" hidden>×</button>

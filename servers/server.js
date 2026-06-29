@@ -272,15 +272,28 @@ app.post('/api/get-uploads-playlist', async (req, res) => {
 // 플레이리스트 영상 조회 엔드포인트
 app.post('/api/get-playlist-videos', async (req, res) => {
   try {
-    const { playlistId, maxResults = 50, pageToken = '' } = req.body; // ← pageToken 추가
+    const { playlistId, maxResults = 50, pageToken = '', limit: rawLimit } = req.body; // ← limit 추가
 
     if (!playlistId) {
       return res.status(400).json({ error: '플레이리스트 ID가 필요합니다' });
     }
 
+    // limit 정규화: 1~200 사이 정수만 인정, 그 외는 무시(전체 반환 동작으로 fallback)
+    let limit = null;
+    if (rawLimit !== undefined && rawLimit !== null && rawLimit !== '') {
+      const parsed = Number(rawLimit);
+      if (Number.isFinite(parsed) && Number.isInteger(parsed) && parsed >= 1 && parsed <= 200) {
+        limit = parsed;
+      }
+    }
+
+    // limit이 있으면 페이지당 크기도 limit에 맞춰서 API 호출 자체를 줄임.
+    // YouTube Data API는 playlistItems 기본 정렬이 최신순이므로 별도 정렬 불필요.
+    const effectiveMax = limit !== null ? Math.min(50, limit) : Math.min(50, maxResults);
+
     const url =
       `${YT_API}/playlistItems?part=snippet,contentDetails&playlistId=${encodeURIComponent(playlistId)}` +
-      `&maxResults=${maxResults}&key=${apiKey}` +
+      `&maxResults=${effectiveMax}&key=${apiKey}` +
       (pageToken ? `&pageToken=${encodeURIComponent(pageToken)}` : '');
 
     const data = await fetchYouTubeJson(url);
@@ -327,10 +340,12 @@ app.post('/api/get-playlist-videos', async (req, res) => {
       });
     }
 
-    // ← nextPageToken을 클라이언트에 반환
+    // 클라이언트가 누적 limit에 도달하면 더 이상 호출하지 않으므로,
+    // 서버는 페이지당 정상 응답에 limit(정규화된 값)을 함께 돌려줍니다.
     res.json({
       videos,
-      nextPageToken: data.nextPageToken || null
+      nextPageToken: data.nextPageToken || null,
+      limit
     });
   } catch (error) {
     console.error('Error getting playlist videos:', error);

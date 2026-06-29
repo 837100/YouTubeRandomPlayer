@@ -223,6 +223,24 @@ label {
   color: var(--muted);
 }
 
+.requiredMark {
+  color: #f87171;
+  margin-left: 4px;
+  font-weight: 800;
+}
+
+.inputHint {
+  margin: 6px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+input[type="number"].is-invalid {
+  border-color: #f87171;
+  box-shadow: 0 0 0 1px rgba(248, 113, 113, 0.25);
+}
+
 input {
   width: 100%;
   margin-top: 8px;

@@ -4,6 +4,8 @@ const clearVideoUrlBtn = document.getElementById("clearVideoUrlBtn");
 const playUrlBtn = document.getElementById("playUrlBtn");
 const channelInput = document.getElementById("channelInput");
 const clearChannelBtn = document.getElementById("clearChannelBtn");
+const videoCountInput = document.getElementById("videoCountInput");
+const videoCountError = document.getElementById("videoCountError");
 const statusEl = document.getElementById("status");
 const player = document.getElementById("player");
 const loadVideoBtn = document.getElementById("loadVideoBtn");
@@ -43,6 +45,7 @@ let currentQueueFilterKey = null;
 let currentPoolIndex = 0;
 let currentPlaylistId = "";
 let currentNextPageToken = null;
+let currentVideoCount = 50; // VIDEO_COUNT_DEFAULT와 동일; 상수는 아래에서 선언되므로 TDZ 회피를 위해 리터럴 사용
 let isLoading = false;
 let playerLoadTimeoutId = null;
 const LOAD_BTN_DEFAULT_LABEL = "랜덤 영상 재생";
@@ -57,6 +60,9 @@ const VIDEO_POOL_CACHE_KEY_PREFIX = "videoPoolCache";
 const DEFAULT_STATUS_MESSAGE = "대기 중...";
 const AUTOPLAY_DELAY_SEC = 3;
 const PLAYBACK_QUEUE_SIZE = 50;
+const VIDEO_COUNT_MIN = 1;
+const VIDEO_COUNT_MAX = 200;
+const VIDEO_COUNT_DEFAULT = 50;
 
 /**
  * 조회수 범위 필터 토글 상태. true면 입력 칸이 활성화되고 필터가 적용됩니다.
@@ -362,25 +368,31 @@ function clearPlayedVideoIds() {
 }
 
 /**
- * 현재 채널 핸들에 해당하는 영상 풀 캐시 키를 만듭니다.
+ * 현재 채널 핸들과 limit에 해당하는 영상 풀 캐시 키를 만듭니다.
+ *
+ * - limit까지 키에 포함해, 같은 채널이라도 limit이 다르면 다른 풀로 취급합니다.
  *
  * @param {string} handle 채널 핸들
+ * @param {number | null} limit 최신 영상 개수 제한
  * @returns {string} sessionStorage 키
  */
-function getVideoPoolCacheKey(handle) {
-  return `${VIDEO_POOL_CACHE_KEY_PREFIX}:${String(handle || "").trim().toLowerCase()}`;
+function getVideoPoolCacheKey(handle, limit) {
+  const handlePart = String(handle || "").trim().toLowerCase();
+  const limitPart = limit === null || limit === undefined ? "all" : String(limit);
+  return `${VIDEO_POOL_CACHE_KEY_PREFIX}:${handlePart}:${limitPart}`;
 }
 
 /**
- * 주어진 채널 핸들의 캐시된 영상 풀을 sessionStorage에서 읽어옵니다.
+ * 주어진 채널 핸들(+ limit)의 캐시된 영상 풀을 sessionStorage에서 읽어옵니다.
  *
  * @param {string} handle 채널 핸들
+ * @param {number | null} limit 최신 영상 개수 제한
  * @returns {Array<any> | null} 캐시된 영상 배열, 없으면 null
  */
-function loadVideoPoolCache(handle) {
+function loadVideoPoolCache(handle, limit) {
   if (!handle) return null;
   try {
-    const raw = sessionStorage.getItem(getVideoPoolCacheKey(handle));
+    const raw = sessionStorage.getItem(getVideoPoolCacheKey(handle, limit));
     if (!raw) return null;
     const parsed = JSON.parse(raw);
     if (!Array.isArray(parsed)) return null;
@@ -391,15 +403,16 @@ function loadVideoPoolCache(handle) {
 }
 
 /**
- * 주어진 채널 핸들의 영상 풀을 sessionStorage에 저장합니다.
+ * 주어진 채널 핸들(+ limit)의 영상 풀을 sessionStorage에 저장합니다.
  *
  * @param {string} handle 채널 핸들
+ * @param {number | null} limit 최신 영상 개수 제한
  * @param {Array<any>} videos 영상 배열
  */
-function saveVideoPoolCache(handle, videos) {
+function saveVideoPoolCache(handle, limit, videos) {
   if (!handle) return;
   try {
-    sessionStorage.setItem(getVideoPoolCacheKey(handle), JSON.stringify(videos));
+    sessionStorage.setItem(getVideoPoolCacheKey(handle, limit), JSON.stringify(videos));
   } catch (error) {
     // sessionStorage가 막혔거나 용량 초과 시 무시
   }
@@ -409,11 +422,12 @@ function saveVideoPoolCache(handle, videos) {
  * 현재 채널의 영상 풀 캐시를 삭제합니다.
  *
  * @param {string} handle 채널 핸들
+ * @param {number | null} limit 최신 영상 개수 제한
  */
-function clearVideoPoolCache(handle) {
+function clearVideoPoolCache(handle, limit) {
   if (!handle) return;
   try {
-    sessionStorage.removeItem(getVideoPoolCacheKey(handle));
+    sessionStorage.removeItem(getVideoPoolCacheKey(handle, limit));
   } catch (error) {
     // 무시
   }
@@ -562,11 +576,22 @@ async function fetchUploadsPlaylist(channelId) {
   }
 }
 
-async function fetchAllVideosFromPlaylist(playlistId, pageToken = '') {
+/**
+ * 업로드 재생목록의 한 페이지를 가져옵니다.
+ *
+ * @param {string} playlistId 업로드 재생목록 ID
+ * @param {string} [pageToken=''] 다음 페이지 토큰
+ * @param {number | null} [limit=null] 최신 영상 개수 제한(서버에 그대로 전달)
+ * @returns {Promise<{ videos: Array<any>, nextPageToken: string | null }>} 페이지 응답
+ */
+async function fetchAllVideosFromPlaylist(playlistId, pageToken = '', limit = null) {
+  const body = { playlistId, maxResults: 50, pageToken };
+  if (limit !== null && limit !== undefined) body.limit = limit;
+
   const response = await fetch(apiUrl("/api/get-playlist-videos"), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ playlistId, maxResults: 50, pageToken })
+    body: JSON.stringify(body)
   });
 
   if (!response.ok) throw new Error(`Server error: ${response.status}`);
@@ -576,24 +601,32 @@ async function fetchAllVideosFromPlaylist(playlistId, pageToken = '') {
 }
 
 /**
- * 업로드 재생목록의 모든 영상을 페이지네이션으로 가져옵니다.
+ * 업로드 재생목록의 영상을 페이지네이션으로 가져옵니다.
  *
  * - 각 페이지가 도착할 때마다 `onProgress({ loaded, hasMore })` 호출
- * - `nextPageToken`이 없을 때까지 반복
+ * - `nextPageToken`이 없거나 누적 개수가 `limit`에 도달하면 중단
  *
  * @param {string} playlistId 업로드 재생목록 ID
  * @param {(progress: { loaded: number, hasMore: boolean }) => void} [onProgress] 진행 콜백
- * @returns {Promise<Array<any>>} 전체 영상 배열
+ * @param {number | null} [limit=null] 최신 영상 개수 제한
+ * @returns {Promise<Array<any>>} 영상 배열 (limit을 넘지 않음)
  */
-async function fetchAllCandidateVideos(playlistId, onProgress) {
+async function fetchAllCandidateVideos(playlistId, onProgress, limit = null) {
   const allVideos = [];
   let pageToken = '';
   let hasMore = true;
   const notify = typeof onProgress === 'function' ? onProgress : null;
+  const limitCap = (limit !== null && limit !== undefined) ? Number(limit) : null;
 
   while (hasMore) {
-    const { videos, nextPageToken } = await fetchAllVideosFromPlaylist(playlistId, pageToken);
+    const { videos, nextPageToken } = await fetchAllVideosFromPlaylist(playlistId, pageToken, limit);
     allVideos.push(...videos);
+    if (limitCap !== null && allVideos.length >= limitCap) {
+      // limit 도달: 초과분을 잘라내고 페이지네이션 종료
+      allVideos.length = Math.min(allVideos.length, limitCap);
+      hasMore = false;
+      break;
+    }
     hasMore = Boolean(nextPageToken);
     pageToken = nextPageToken || '';
     if (notify) notify({ loaded: allVideos.length, hasMore });
@@ -826,6 +859,57 @@ function getViewCountRange() {
 }
 
 /**
+ * "최신 영상 개수" 입력값을 검증해 정수 또는 null(빈 값/오류)을 돌려줍니다.
+ *
+ * - 빈 값 → { valid: false, error: "..." } (필수 입력)
+ * - 정수가 아님 / 1 미만 / VIDEO_COUNT_MAX 초과 / 소수 → 각 한국어 메시지
+ * - 통과 시 { valid: true, value: number, error: "" }
+ *
+ * @param {string} value 입력 칸의 문자열
+ * @returns {{ valid: boolean, value: number | null, error: string }} 검증 결과
+ */
+function parseVideoCount(value) {
+  const raw = String(value === undefined || value === null ? "" : value).trim();
+
+  if (raw === "") {
+    return { valid: false, value: null, error: "최신 영상 개수를 입력하세요." };
+  }
+  if (!/^\d+$/.test(raw)) {
+    return { valid: false, value: null, error: "영상 개수는 1 이상의 정수로 입력해 주세요." };
+  }
+
+  const n = Number(raw);
+  if (!Number.isFinite(n) || !Number.isInteger(n) || n < VIDEO_COUNT_MIN) {
+    return { valid: false, value: null, error: "영상 개수는 1 이상의 정수로 입력해 주세요." };
+  }
+  if (n > VIDEO_COUNT_MAX) {
+    return { valid: false, value: null, error: `영상 개수는 최대 ${VIDEO_COUNT_MAX}개까지 가능합니다.` };
+  }
+
+  return { valid: true, value: n, error: "" };
+}
+
+/**
+ * "최신 영상 개수" 입력 변경 시 검증 → 인라인 경고 → 제출 버튼 잠금.
+ *
+ * - 조회수 범위와 동일한 UX 패턴: 통과 시 메시지/테두리 초기화, 실패 시 빨간 테두리 + 메시지.
+ */
+function onVideoCountInputChange() {
+  const result = parseVideoCount(videoCountInput.value);
+
+  videoCountInput.classList.remove("is-invalid");
+
+  if (result.valid) {
+    videoCountError.hidden = true;
+    videoCountError.textContent = "";
+  } else {
+    videoCountError.hidden = false;
+    videoCountError.textContent = result.error;
+    videoCountInput.classList.add("is-invalid");
+  }
+}
+
+/**
  * 현재 입력값이 유효한지 검증하고 한국어 오류 메시지를 돌려줍니다.
  *
  * @returns {{ valid: boolean, error: string }} 검증 결과
@@ -888,21 +972,23 @@ function applyGridFilters(videos) {
  *
  * - 재생 큐가 같은 필터인지 비교할 때 사용됩니다.
  * - 조회수 토글이 OFF면 토글/입력값은 키에 포함하지 않습니다.
+ * - limit이 바뀌면 다른 식별자로 인식되어 큐가 새로 빌드됩니다.
  *
- * @returns {string} 필터 식별자 (예: "60s:1|live:0|vc:10000-500000" 또는 "60s:0|live:0|vc:off")
+ * @returns {string} 필터 식별자 (예: "n:50|60s:1|live:0|vc:off" 또는 "n:200|60s:0|live:0|vc:10000-500000")
  */
 function buildFilterKey() {
+  const limitPart = Number.isFinite(currentVideoCount) ? `n:${currentVideoCount}` : `n:def`;
   const shorts = exclude60sCheckbox.checked ? "1" : "0";
   const live = excludeLiveCheckbox.checked ? "1" : "0";
 
   if (!viewCountFilterEnabled) {
-    return `60s:${shorts}|live:${live}|vc:off`;
+    return `${limitPart}|60s:${shorts}|live:${live}|vc:off`;
   }
 
   const { min, max } = getViewCountRange();
   const minPart = min === null ? "*" : String(min);
   const maxPart = max === null ? "*" : String(max);
-  return `60s:${shorts}|live:${live}|vc:${minPart}-${maxPart}`;
+  return `${limitPart}|60s:${shorts}|live:${live}|vc:${minPart}-${maxPart}`;
 }
 
 /**
@@ -1021,6 +1107,17 @@ async function loadRandomVideo() {
   clearAutoPlayTimeout();
   // 코드 레벨 중복 호출 가드
   if (isLoading) return;
+
+  // "최신 영상 개수" 필수/범위 검증 — 실패 시 즉시 안내하고 중단합니다.
+  const videoCountCheck = parseVideoCount(videoCountInput.value);
+  if (!videoCountCheck.valid) {
+    setStatus(videoCountCheck.error);
+    onVideoCountInputChange();
+    videoCountInput.focus();
+    return;
+  }
+  currentVideoCount = videoCountCheck.value;
+
   isLoading = true;
   let startedPlayback = false;
   setPlaybackControlsLoading(true);
@@ -1048,12 +1145,12 @@ async function loadRandomVideo() {
       return;
     }
 
-    // 풀 우선순위: ① 캐시 (같은 채널 재방문) ② 네트워크 fetch
-    let pool = loadVideoPoolCache(currentChannelHandle);
+    // 풀 우선순위: ① 캐시 (같은 채널 + 같은 limit 재방문) ② 네트워크 fetch
+    let pool = loadVideoPoolCache(currentChannelHandle, currentVideoCount);
 
     if (!pool) {
-      // 캐시 미스: 페이지네이션으로 전체 fetch
-      const firstPage = await fetchAllVideosFromPlaylist(uploadsPlaylistId);
+      // 캐시 미스: 페이지네이션으로 최신 N개까지 fetch
+      const firstPage = await fetchAllVideosFromPlaylist(uploadsPlaylistId, '', currentVideoCount);
       pool = [...firstPage.videos];
 
       if (firstPage.nextPageToken) {
@@ -1061,9 +1158,11 @@ async function loadRandomVideo() {
         setStatus(buildCandidateLoadMessage(totalProgress));
 
         try {
-          const allVideos = await fetchAllCandidateVideos(uploadsPlaylistId, (progress) => {
-            setStatus(buildCandidateLoadMessage(progress));
-          });
+          const allVideos = await fetchAllCandidateVideos(
+            uploadsPlaylistId,
+            (progress) => setStatus(buildCandidateLoadMessage(progress)),
+            currentVideoCount
+          );
           pool = allVideos;
         } catch (error) {
           console.error('Error fetching remaining videos:', error);
@@ -1071,9 +1170,9 @@ async function loadRandomVideo() {
         }
       }
 
-      saveVideoPoolCache(currentChannelHandle, pool);
+      saveVideoPoolCache(currentChannelHandle, currentVideoCount, pool);
     } else {
-      setStatus(`캐시에서 영상 ${pool.length}개 로드, 랜덤 선택 중...`);
+      setStatus(`캐시에서 최신 ${pool.length}개 로드, 랜덤 선택 중...`);
     }
 
     currentCandidatePool = pool;
@@ -1175,6 +1274,12 @@ videoUrlInput.addEventListener("keydown", (event) => {
 });
 channelInput.addEventListener("input", () => {
   updateClearBtnVisibility();
+});
+
+// "최신 영상 개수" 입력 변화 시 실시간 검증
+[videoCountInput].forEach((el) => {
+  el.addEventListener("input", onVideoCountInputChange);
+  el.addEventListener("change", onVideoCountInputChange);
 });
 
 // 클리어 버튼 동작
