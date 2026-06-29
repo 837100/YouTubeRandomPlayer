@@ -1185,8 +1185,7 @@ async function loadRandomVideo() {
     renderVideoGrid();
 
     // 큐 빌드 + 픽업
-    pickAndPlayNext();
-    startedPlayback = true;
+    startedPlayback = pickAndPlayNext();
   } catch (error) {
     console.error(error);
     if (error.status === 404) {
@@ -1205,7 +1204,10 @@ async function loadRandomVideo() {
 /**
  * 현재 후보 풀 + 필터에서 다음에 재생할 영상을 큐에서 꺼내 재생합니다.
  *
- * - 후보가 아예 없으면 상태 메시지로 안내하고 종료합니다.
+ * - 후보가 아예 없으면 상태 메시지로 안내하고, 호출자가 isLoading 잠금을 풀 수 있도록
+ *   `finishPlaybackLoading()`을 명시적으로 호출합니다 (playVideo 경로가 아니므로 자동 해제 안 됨).
+ *
+ * @returns {boolean} 큐에서 재생 가능한 영상을 꺼냈는지 여부
  */
 function pickAndPlayNext() {
   // 큐가 비어 있거나 필터가 바뀌었으면 (재)빌드
@@ -1216,19 +1218,22 @@ function pickAndPlayNext() {
       ? `최신 ${currentVideoCount}개의 영상을 모두 재생했거나 필터 조건에 맞는 영상이 없습니다. 필터를 조정하거나 다른 핸들을 시도해 보세요.`
       : "필터 조건에 맞는 영상이 없습니다. 제외 옵션을 끄거나 다른 핸들을 시도해 보세요.";
     setStatus(hint);
-    return;
+    finishPlaybackLoading();
+    return false;
   }
 
   const next = takeNextFromQueue();
 
   if (!next) {
     setStatus("필터 조건에 맞는 영상이 없습니다. 제외 옵션을 끄거나 다른 핸들을 시도해 보세요.");
-    return;
+    finishPlaybackLoading();
+    return false;
   }
 
   savePlayedVideoId(next.videoId);
   setStatus(`재생 중: ${next.title}`);
   playVideo(next.videoId);
+  return true;
 }
 
 /**
