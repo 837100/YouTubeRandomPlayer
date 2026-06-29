@@ -38,6 +38,9 @@ let currentChannel = null;
 let currentVideoId = "";
 let currentVideos = [];
 let currentCandidatePool = [];
+let currentPlaybackQueue = [];
+let currentQueueFilterKey = null;
+let currentPoolIndex = 0;
 let currentPlaylistId = "";
 let currentNextPageToken = null;
 let isLoading = false;
@@ -50,8 +53,10 @@ const PLAYER_LOAD_TIMEOUT_MS = 12000;
 const CINEMA_MODE_KEY = "cinemaMode";
 const CHANNEL_HANDLE_KEY = "channelHandle";
 const PLAYED_VIDEO_IDS_KEY_PREFIX = "playedVideoIds";
+const VIDEO_POOL_CACHE_KEY_PREFIX = "videoPoolCache";
 const DEFAULT_STATUS_MESSAGE = "대기 중...";
 const AUTOPLAY_DELAY_SEC = 3;
+const PLAYBACK_QUEUE_SIZE = 50;
 
 /**
  * 조회수 범위 필터 토글 상태. true면 입력 칸이 활성화되고 필터가 적용됩니다.
@@ -186,6 +191,7 @@ function clearChannelInput() {
   currentChannelHandle = "";
   currentChannel = null;
   currentVideos = [];
+  resetPlaybackQueueForNewChannel();
   saveChannelHandle("");
   updateClearBtnVisibility();
   renderChannelBar(null);
@@ -353,6 +359,153 @@ function clearPlayedVideoIds() {
   } catch (error) {
     // sessionStorage가 막힌 환경에서는 무시
   }
+}
+
+/**
+ * 현재 채널 핸들에 해당하는 영상 풀 캐시 키를 만듭니다.
+ *
+ * @param {string} handle 채널 핸들
+ * @returns {string} sessionStorage 키
+ */
+function getVideoPoolCacheKey(handle) {
+  return `${VIDEO_POOL_CACHE_KEY_PREFIX}:${String(handle || "").trim().toLowerCase()}`;
+}
+
+/**
+ * 주어진 채널 핸들의 캐시된 영상 풀을 sessionStorage에서 읽어옵니다.
+ *
+ * @param {string} handle 채널 핸들
+ * @returns {Array<any> | null} 캐시된 영상 배열, 없으면 null
+ */
+function loadVideoPoolCache(handle) {
+  if (!handle) return null;
+  try {
+    const raw = sessionStorage.getItem(getVideoPoolCacheKey(handle));
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return null;
+    return parsed;
+  } catch (error) {
+    return null;
+  }
+}
+
+/**
+ * 주어진 채널 핸들의 영상 풀을 sessionStorage에 저장합니다.
+ *
+ * @param {string} handle 채널 핸들
+ * @param {Array<any>} videos 영상 배열
+ */
+function saveVideoPoolCache(handle, videos) {
+  if (!handle) return;
+  try {
+    sessionStorage.setItem(getVideoPoolCacheKey(handle), JSON.stringify(videos));
+  } catch (error) {
+    // sessionStorage가 막혔거나 용량 초과 시 무시
+  }
+}
+
+/**
+ * 현재 채널의 영상 풀 캐시를 삭제합니다.
+ *
+ * @param {string} handle 채널 핸들
+ */
+function clearVideoPoolCache(handle) {
+  if (!handle) return;
+  try {
+    sessionStorage.removeItem(getVideoPoolCacheKey(handle));
+  } catch (error) {
+    // 무시
+  }
+}
+
+/**
+ * 주어진 영상 배열을 Fisher-Yates 알고리즘으로 제자리 셔플합니다.
+ *
+ * @param {Array<any>} array 셔플할 배열
+ */
+function shuffleInPlace(array) {
+  for (let i = array.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [array[i], array[j]] = [array[j], array[i]];
+  }
+}
+
+/**
+ * 현재 영상 풀과 필터로부터 셔플된 재생 큐를 만듭니다.
+ *
+ * - `passesFilters`로 필터링 후 셔플, 앞에서부터 최대 PLAYBACK_QUEUE_SIZE 개
+ *
+ * @param {Array<any>} pool 채널의 전체 영상 풀
+ * @param {string} filterKey 큐에 함께 기록할 필터 식별자
+ * @returns {Array<any>} 셔플된 큐
+ */
+function buildPlaybackQueueFromPool(pool, filterKey) {
+  const filtered = pool.filter(passesFilters);
+  shuffleInPlace(filtered);
+  currentPlaybackQueue = filtered.slice(0, PLAYBACK_QUEUE_SIZE);
+  currentQueueFilterKey = filterKey;
+  return currentPlaybackQueue;
+}
+
+/**
+ * 큐가 비어 있거나 필터가 바뀌었으면 새로 채웁니다.
+ *
+ * - 큐가 비어 있으면 시청 기록을 초기화한 뒤 풀에서 새 큐를 만듭니다.
+ *   → 사용자가 명시한 "50개 다 재생 시 재생되었던 영상 제외 후 재추첨" 알고리즘.
+ * - 채널이 바뀌었거나 풀 자체가 비어 있으면 큐를 비웁니다.
+ */
+function ensurePlaybackQueue() {
+  const filterKey = buildFilterKey();
+
+  if (!currentCandidatePool.length) {
+    currentPlaybackQueue = [];
+    currentQueueFilterKey = filterKey;
+    return;
+  }
+
+  // 필터가 바뀌었으면 풀의 시작점부터 처음부터 다시 채웁니다.
+  if (filterKey !== currentQueueFilterKey) {
+    currentPoolIndex = 0;
+    buildPlaybackQueueFromPool(currentCandidatePool, filterKey);
+    return;
+  }
+
+  // 큐가 비어 있으면 시청 기록을 초기화한 뒤 풀에서 새 큐를 만듭니다.
+  if (currentPlaybackQueue.length === 0) {
+    clearPlayedVideoIds();
+    currentPoolIndex = 0;
+    buildPlaybackQueueFromPool(currentCandidatePool, filterKey);
+    return;
+  }
+
+  // 큐가 아직 남아 있으면 그대로 유지 — 다음 takeNextFromQueue()에서 꺼냅니다.
+  return;
+}
+
+/**
+ * 현재 재생 큐에서 다음에 재생할 영상을 꺼냅니다.
+ *
+ * - 큐가 비어 있으면 시청 기록을 초기화한 뒤 큐를 다시 채웁니다.
+ * - 그래도 후보가 없으면 null 을 반환합니다.
+ *
+ * @returns {any | null} 다음 영상 또는 null
+ */
+function takeNextFromQueue() {
+  ensurePlaybackQueue();
+
+  if (currentPlaybackQueue.length === 0) return null;
+
+  // 큐에서 가장 먼저 추가된 영상을 꺼냅니다.
+  const next = currentPlaybackQueue.shift();
+
+  // 큐가 비어졌으면 다음 50개를 풀에서 가져옵니다.
+  if (currentPlaybackQueue.length === 0 && currentCandidatePool.length > currentPoolIndex) {
+    currentPlaybackQueue = currentCandidatePool.slice(currentPoolIndex, currentPoolIndex + PLAYBACK_QUEUE_SIZE);
+    currentPoolIndex += PLAYBACK_QUEUE_SIZE;
+  }
+
+  return next;
 }
 
 /**
@@ -731,6 +884,28 @@ function applyGridFilters(videos) {
 }
 
 /**
+ * 현재 필터 상태를 식별자 문자열로 직렬화합니다.
+ *
+ * - 재생 큐가 같은 필터인지 비교할 때 사용됩니다.
+ * - 조회수 토글이 OFF면 토글/입력값은 키에 포함하지 않습니다.
+ *
+ * @returns {string} 필터 식별자 (예: "60s:1|live:0|vc:10000-500000" 또는 "60s:0|live:0|vc:off")
+ */
+function buildFilterKey() {
+  const shorts = exclude60sCheckbox.checked ? "1" : "0";
+  const live = excludeLiveCheckbox.checked ? "1" : "0";
+
+  if (!viewCountFilterEnabled) {
+    return `60s:${shorts}|live:${live}|vc:off`;
+  }
+
+  const { min, max } = getViewCountRange();
+  const minPart = min === null ? "*" : String(min);
+  const maxPart = max === null ? "*" : String(max);
+  return `60s:${shorts}|live:${live}|vc:${minPart}-${maxPart}`;
+}
+
+/**
  * 비디오 그리드를 그립니다. 필터 변경 시에도 그대로 재호출됩니다.
  */
 function renderVideoGrid() {
@@ -831,6 +1006,17 @@ function playVideoFromGrid(videoId, title) {
   window.scrollTo({ top: 0, behavior: "smooth" }); // 영상 재생 시 상단으로 스크롤
 }
 
+/**
+ * 채널이 바뀌었거나 풀이 비어 있을 때 큐/인덱스 상태를 초기화합니다.
+ *
+ * - 채널 A의 큐가 남아 있는 채로 채널 B의 풀을 받아와도 B 영상으로만 재생되도록 합니다.
+ */
+function resetPlaybackQueueForNewChannel() {
+  currentPlaybackQueue = [];
+  currentQueueFilterKey = null;
+  currentPoolIndex = 0;
+}
+
 async function loadRandomVideo() {
   clearAutoPlayTimeout();
   // 코드 레벨 중복 호출 가드
@@ -838,6 +1024,9 @@ async function loadRandomVideo() {
   isLoading = true;
   let startedPlayback = false;
   setPlaybackControlsLoading(true);
+
+  // 채널이 바뀌었으므로 이전 채널의 큐/인덱스를 깨끗이 비웁니다.
+  resetPlaybackQueueForNewChannel();
 
   try {
     setStatus("채널 확인 중...");
@@ -851,7 +1040,7 @@ async function loadRandomVideo() {
     setStatus("영상 목록 불러오는 중...");
     const { uploadsPlaylistId, channel } = await fetchUploadsPlaylist(channelId);
     currentChannel = channel;
-    currentPlaylistId = uploadsPlaylistId; // ← 저장
+    currentPlaylistId = uploadsPlaylistId;
     renderChannelBar(channel);
 
     if (!uploadsPlaylistId) {
@@ -859,64 +1048,49 @@ async function loadRandomVideo() {
       return;
     }
 
-    // 첫 페이지를 먼저 받아서 그리드를 즉시 렌더 (사용자가 빠르게 첫 결과를 봄)
-    const firstPage = await fetchAllVideosFromPlaylist(uploadsPlaylistId);
-    currentVideos = firstPage.videos;
-    currentNextPageToken = firstPage.nextPageToken; // ← 저장
-    currentCandidatePool = [...firstPage.videos];
-    renderVideoGrid();
+    // 풀 우선순위: ① 캐시 (같은 채널 재방문) ② 네트워크 fetch
+    let pool = loadVideoPoolCache(currentChannelHandle);
 
-    if (!firstPage.videos.length) {
+    if (!pool) {
+      // 캐시 미스: 페이지네이션으로 전체 fetch
+      const firstPage = await fetchAllVideosFromPlaylist(uploadsPlaylistId);
+      pool = [...firstPage.videos];
+
+      if (firstPage.nextPageToken) {
+        const totalProgress = { loaded: pool.length, hasMore: true };
+        setStatus(buildCandidateLoadMessage(totalProgress));
+
+        try {
+          const allVideos = await fetchAllCandidateVideos(uploadsPlaylistId, (progress) => {
+            setStatus(buildCandidateLoadMessage(progress));
+          });
+          pool = allVideos;
+        } catch (error) {
+          console.error('Error fetching remaining videos:', error);
+          // 부분 풀만이라도 진행
+        }
+      }
+
+      saveVideoPoolCache(currentChannelHandle, pool);
+    } else {
+      setStatus(`캐시에서 영상 ${pool.length}개 로드, 랜덤 선택 중...`);
+    }
+
+    currentCandidatePool = pool;
+
+    if (!pool.length) {
       setStatus("재생할 영상을 찾지 못했습니다.");
       return;
     }
 
-    // 후보 풀의 첫 페이지에서 즉시 후보가 있으면 바로 렌더 가능하지만,
-    // 사용자가 원하는 것은 "전체 영상"에서의 랜덤이므로 후보 풀을 끝까지 채운다.
-    const totalProgress = { loaded: firstPage.videos.length, hasMore: Boolean(firstPage.nextPageToken) };
-    setStatus(buildCandidateLoadMessage(totalProgress));
+    // 그리드 표시용: 풀의 첫 50개 (기존 UX 유지)
+    currentVideos = pool.slice(0, 50);
+    currentNextPageToken = pool.length > 50 ? "" : null; // 풀에서 그리드 페이지네이션은 더 이상 필요 없음
+    renderVideoGrid();
 
-    const finishWithPool = (pool) => {
-      const filtered = filterVideos(pool);
-
-      if (!filtered.length) {
-        setStatus("필터 조건에 맞는 영상이 없습니다. 제외 옵션을 끄거나 다른 핸들을 시도해 보세요.");
-        return;
-      }
-
-      const candidates = getUnplayedCandidates(filtered);
-
-      if (!candidates.length) {
-        setAllPlayedStatus();
-        return;
-      }
-
-      const random = candidates[Math.floor(Math.random() * candidates.length)];
-      savePlayedVideoId(random.videoId);
-      setStatus(`재생 중: ${random.title}`);
-      playVideo(random.videoId);
-      startedPlayback = true;
-    };
-
-    if (!firstPage.nextPageToken) {
-      // 단일 페이지에 모든 영상이 들어있는 경우
-      finishWithPool(currentCandidatePool);
-      return;
-    }
-
-    // 백그라운드로 나머지 페이지 누적 → 끝나면 즉시 재생
-    try {
-      const allVideos = await fetchAllCandidateVideos(uploadsPlaylistId, (progress) => {
-        setStatus(buildCandidateLoadMessage(progress));
-      });
-      currentCandidatePool = allVideos;
-      // 마지막 pageToken도 동기화 (loadMoreVideos 와 일관성 유지)
-      finishWithPool(currentCandidatePool);
-    } catch (error) {
-      console.error('Error fetching remaining videos:', error);
-      // 백그라운드 fetch 실패 시에도 첫 페이지 풀에서는 재생 시도
-      finishWithPool(currentCandidatePool);
-    }
+    // 큐 빌드 + 픽업
+    pickAndPlayNext();
+    startedPlayback = true;
   } catch (error) {
     console.error(error);
     if (error.status === 404) {
@@ -930,6 +1104,33 @@ async function loadRandomVideo() {
       setPlaybackControlsLoading(false);
     }
   }
+}
+
+/**
+ * 현재 후보 풀 + 필터에서 다음에 재생할 영상을 큐에서 꺼내 재생합니다.
+ *
+ * - 큐가 비어 있으면 자동으로 시청 기록을 초기화한 뒤 큐를 새로 채웁니다.
+ * - 후보가 아예 없으면 상태 메시지로 안내하고 종료합니다.
+ */
+function pickAndPlayNext() {
+  // 큐가 비어 있거나 필터가 바뀌었으면 (재)빌드
+  ensurePlaybackQueue();
+
+  if (currentPlaybackQueue.length === 0) {
+    setStatus("필터 조건에 맞는 영상이 없습니다. 제외 옵션을 끄거나 다른 핸들을 시도해 보세요.");
+    return;
+  }
+
+  const next = takeNextFromQueue();
+
+  if (!next) {
+    setStatus("필터 조건에 맞는 영상이 없습니다. 제외 옵션을 끄거나 다른 핸들을 시도해 보세요.");
+    return;
+  }
+
+  savePlayedVideoId(next.videoId);
+  setStatus(`재생 중: ${next.title}`);
+  playVideo(next.videoId);
 }
 
 /**
