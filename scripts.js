@@ -63,7 +63,7 @@ const VIDEO_POOL_CACHE_KEY_PREFIX = "videoPoolCache";
 const DEFAULT_STATUS_MESSAGE = "대기 중...";
 const AUTOPLAY_DELAY_SEC = 3;
 const VIDEO_COUNT_MIN = 1;
-const VIDEO_COUNT_MAX = 200;
+const VIDEO_COUNT_MAX = 5000;
 const VIDEO_COUNT_DEFAULT = 50;
 
 /**
