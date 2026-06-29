@@ -4,6 +4,9 @@ const clearVideoUrlBtn = document.getElementById("clearVideoUrlBtn");
 const playUrlBtn = document.getElementById("playUrlBtn");
 const channelInput = document.getElementById("channelInput");
 const clearChannelBtn = document.getElementById("clearChannelBtn");
+const videoCountFilterGroup = document.getElementById("videoCountFilterGroup");
+const videoCountToggleBtn = document.getElementById("videoCountToggleBtn");
+const videoCountFilterBody = document.getElementById("videoCountFilterBody");
 const videoCountInput = document.getElementById("videoCountInput");
 const videoCountError = document.getElementById("videoCountError");
 const statusEl = document.getElementById("status");
@@ -45,7 +48,7 @@ let currentQueueFilterKey = null;
 let currentPoolIndex = 0;
 let currentPlaylistId = "";
 let currentNextPageToken = null;
-let currentVideoCount = 50; // VIDEO_COUNT_DEFAULT와 동일; 상수는 아래에서 선언되므로 TDZ 회피를 위해 리터럴 사용
+let currentVideoCount = null; // null = 토글 OFF(전체 페이지네이션), number = 토글 ON(최신 N개)
 let isLoading = false;
 let playerLoadTimeoutId = null;
 const LOAD_BTN_DEFAULT_LABEL = "랜덤 영상 재생";
@@ -68,6 +71,11 @@ const VIDEO_COUNT_DEFAULT = 50;
  * 조회수 범위 필터 토글 상태. true면 입력 칸이 활성화되고 필터가 적용됩니다.
  */
 let viewCountFilterEnabled = false;
+
+/**
+ * "최신 영상 개수" 토글 상태. true면 입력한 개수만큼만 가져오고, false면 전체에서 추첨합니다.
+ */
+let videoCountFilterEnabled = false;
 
 const autoPlayToggleBtn = document.getElementById("autoPlayToggleBtn");
 const autoPlayToggleLabel = autoPlayToggleBtn.querySelector(".autoPlayToggle__label");
@@ -890,24 +898,10 @@ function parseVideoCount(value) {
 }
 
 /**
- * "최신 영상 개수" 입력 변경 시 검증 → 인라인 경고 → 제출 버튼 잠금.
+ * "최신 영상 개수" 입력 변경 시 검증 → 인라인 경고.
  *
- * - 조회수 범위와 동일한 UX 패턴: 통과 시 메시지/테두리 초기화, 실패 시 빨간 테두리 + 메시지.
+ * - 토글이 켜져 있을 때만 동작합니다(상위 정의 onVideoCountInputChange 참고).
  */
-function onVideoCountInputChange() {
-  const result = parseVideoCount(videoCountInput.value);
-
-  videoCountInput.classList.remove("is-invalid");
-
-  if (result.valid) {
-    videoCountError.hidden = true;
-    videoCountError.textContent = "";
-  } else {
-    videoCountError.hidden = false;
-    videoCountError.textContent = result.error;
-    videoCountInput.classList.add("is-invalid");
-  }
-}
 
 /**
  * 현재 입력값이 유효한지 검증하고 한국어 오류 메시지를 돌려줍니다.
@@ -977,7 +971,7 @@ function applyGridFilters(videos) {
  * @returns {string} 필터 식별자 (예: "n:50|60s:1|live:0|vc:off" 또는 "n:200|60s:0|live:0|vc:10000-500000")
  */
 function buildFilterKey() {
-  const limitPart = Number.isFinite(currentVideoCount) ? `n:${currentVideoCount}` : `n:def`;
+  const limitPart = Number.isFinite(currentVideoCount) ? `n:${currentVideoCount}` : `n:off`;
   const shorts = exclude60sCheckbox.checked ? "1" : "0";
   const live = excludeLiveCheckbox.checked ? "1" : "0";
 
@@ -1109,14 +1103,19 @@ async function loadRandomVideo() {
   if (isLoading) return;
 
   // "최신 영상 개수" 필수/범위 검증 — 실패 시 즉시 안내하고 중단합니다.
-  const videoCountCheck = parseVideoCount(videoCountInput.value);
-  if (!videoCountCheck.valid) {
-    setStatus(videoCountCheck.error);
-    onVideoCountInputChange();
-    videoCountInput.focus();
-    return;
+  // "최신 영상 개수" 토글: OFF면 전체에서 추첨(null), ON이면 검증된 값을 사용.
+  if (videoCountFilterEnabled) {
+    const videoCountCheck = parseVideoCount(videoCountInput.value);
+    if (!videoCountCheck.valid) {
+      setStatus(videoCountCheck.error);
+      onVideoCountInputChange();
+      videoCountInput.focus();
+      return;
+    }
+    currentVideoCount = videoCountCheck.value;
+  } else {
+    currentVideoCount = null;
   }
-  currentVideoCount = videoCountCheck.value;
 
   isLoading = true;
   let startedPlayback = false;
@@ -1172,7 +1171,10 @@ async function loadRandomVideo() {
 
       saveVideoPoolCache(currentChannelHandle, currentVideoCount, pool);
     } else {
-      setStatus(`캐시에서 최신 ${pool.length}개 로드, 랜덤 선택 중...`);
+      const cachedLabel = currentVideoCount === null
+        ? `캐시에서 전체 영상 ${pool.length}개 로드, 랜덤 선택 중...`
+        : `캐시에서 최신 ${pool.length}개 로드, 랜덤 선택 중...`;
+      setStatus(cachedLabel);
     }
 
     currentCandidatePool = pool;
@@ -1385,6 +1387,73 @@ setViewCountFilterEnabled(false);
 [minViewCountInput, maxViewCountInput].forEach((el) => {
   el.addEventListener("input", onViewCountInputChange);
   el.addEventListener("change", onViewCountInputChange);
+});
+
+/**
+ * "최신 영상 개수" 입력 변경 시 검증 → 인라인 경고.
+ *
+ * - 토글이 켜져 있을 때만 동작합니다.
+ * - 조회수 범위와 다르게 제출 버튼을 잠그지는 않습니다(다른 필드는 미리 막을 수 있지만,
+ *   영상 개수 토글은 즉시 OFF로 돌리면 그만이라 굳이 잠글 필요가 없습니다).
+ */
+function onVideoCountInputChange() {
+  if (!videoCountFilterEnabled) {
+    videoCountInput.classList.remove("is-invalid");
+    videoCountError.hidden = true;
+    videoCountError.textContent = "";
+    return;
+  }
+
+  const result = parseVideoCount(videoCountInput.value);
+
+  videoCountInput.classList.remove("is-invalid");
+
+  if (result.valid) {
+    videoCountError.hidden = true;
+    videoCountError.textContent = "";
+  } else {
+    videoCountError.hidden = false;
+    videoCountError.textContent = result.error;
+    videoCountInput.classList.add("is-invalid");
+  }
+}
+
+/**
+ * "최신 영상 개수" 토글 상태를 적용합니다.
+ *
+ * - 입력 칸의 disabled 속성 동기화
+ * - 박스 영역 흐림 효과(is-disabled) 동기화
+ * - 토글 스위치의 aria-checked / 시각 상태 갱신
+ * - 본문 표시/숨김
+ * - 토글 OFF 시 기존 에러 메시지/빨간 테두리 초기화
+ *
+ * @param {boolean} enabled 토글 ON/OFF
+ */
+function setVideoCountFilterEnabled(enabled) {
+  videoCountFilterEnabled = enabled;
+
+  videoCountToggleBtn.setAttribute("aria-checked", String(enabled));
+  videoCountFilterGroup.classList.toggle("is-disabled", !enabled);
+  videoCountFilterBody.hidden = !enabled;
+  videoCountInput.disabled = !enabled;
+
+  if (!enabled) {
+    videoCountError.hidden = true;
+    videoCountError.textContent = "";
+    videoCountInput.classList.remove("is-invalid");
+  }
+}
+
+videoCountToggleBtn.addEventListener("click", () => {
+  setVideoCountFilterEnabled(!videoCountFilterEnabled);
+});
+
+// 초기 상태 적용 (HTML 기본 disabled/aria-checked="false" 와 동기화)
+setVideoCountFilterEnabled(false);
+
+[videoCountInput].forEach((el) => {
+  el.addEventListener("input", onVideoCountInputChange);
+  el.addEventListener("change", onVideoCountInputChange);
 });
 
 // "다른 랜덤 영상" 버튼은 사용하지 않음
