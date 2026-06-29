@@ -62,7 +62,6 @@ const PLAYED_VIDEO_IDS_KEY_PREFIX = "playedVideoIds";
 const VIDEO_POOL_CACHE_KEY_PREFIX = "videoPoolCache";
 const DEFAULT_STATUS_MESSAGE = "대기 중...";
 const AUTOPLAY_DELAY_SEC = 3;
-const PLAYBACK_QUEUE_SIZE = 50;
 const VIDEO_COUNT_MIN = 1;
 const VIDEO_COUNT_MAX = 200;
 const VIDEO_COUNT_DEFAULT = 50;
@@ -135,27 +134,6 @@ function apiUrl(path) {
 
 function setStatus(message) {
   statusEl.textContent = message;
-}
-
-/**
- * 상태 줄 오른쪽에 시청 기록 초기화 버튼을 함께 표시합니다.
- */
-function setAllPlayedStatus() {
-  const message = document.createElement("span");
-  const resetBtn = document.createElement("button");
-
-  message.className = "statusMessage";
-  message.textContent = "이 채널의 필터 조건에 맞는 영상을 모두 재생했습니다.";
-
-  resetBtn.type = "button";
-  resetBtn.className = "statusAction";
-  resetBtn.textContent = "시청했던 영상 목록 초기화";
-  resetBtn.addEventListener("click", () => {
-    clearPlayedVideoIds();
-    setStatus("시청했던 영상 목록을 초기화했습니다.");
-  });
-
-  statusEl.replaceChildren(message, resetBtn);
 }
 
 /**
@@ -328,10 +306,18 @@ function filterVideos(videos) {
 }
 
 /**
- * 현재 채널 핸들에 해당하는 세션 저장소 키를 만듭니다.
+ * 현재 채널 핸들(+ limit)에 해당하는 세션 저장소 키를 만듭니다.
+ *
+ * - limit을 키에 포함해, 같은 채널이라도 limit이 다르면 시청 기록이 분리됩니다.
+ *   즉 limit=20에서 20개를 모두 본 뒤 limit=50으로 확장하면 그 20개는 다시 보이지 않습니다.
+ * - 핸들이 비어 있으면 다른 키로 충돌하지 않도록 임시 키를 사용합니다.
+ *
+ * @returns {string} sessionStorage 키
  */
 function getPlayedVideoIdsKey() {
-  return `${PLAYED_VIDEO_IDS_KEY_PREFIX}:${currentChannelHandle.trim().toLowerCase()}`;
+  const handlePart = String(currentChannelHandle || "").trim().toLowerCase() || "unknown";
+  const limitPart = Number.isFinite(currentVideoCount) ? `n${currentVideoCount}` : "nall";
+  return `${PLAYED_VIDEO_IDS_KEY_PREFIX}:${handlePart}:${limitPart}`;
 }
 
 /**
@@ -454,18 +440,36 @@ function shuffleInPlace(array) {
 }
 
 /**
- * 현재 영상 풀과 필터로부터 셔플된 재생 큐를 만듭니다.
+ * 풀에서 시청 기록을 제외한 후보를 셔플해서 큐로 적재합니다.
  *
- * - `passesFilters`로 필터링 후 셔플, 앞에서부터 최대 PLAYBACK_QUEUE_SIZE 개
+ * - 풀의 시청 가능 후보 전부를 한 번에 셔플해서 큐로 적재합니다 (limit 풀은 ≤200이라 안전).
+ * - 재호출될 때마다 시청 기록을 다시 반영하므로, refill 시에도 이미 본 영상은 다시 안 나옵니다.
+ * - 시청 기록이 풀을 다 포함하면 큐가 비어 있게 됩니다 — 그 경우 호출자가 별도로 처리합니다.
  *
- * @param {Array<any>} pool 채널의 전체 영상 풀
+ * @param {Array<any>} pool 채널의 전체 영상 풀 (limit 적용됨)
+ */
+function rebuildShuffledQueueFromPool(pool) {
+  const playedIds = getPlayedVideoIds();
+  const playedSet = new Set(playedIds);
+  const candidates = pool.filter(
+    (video) => passesFilters(video) && !playedSet.has(video.videoId)
+  );
+  shuffleInPlace(candidates);
+  currentPlaybackQueue = candidates;
+  currentPoolIndex = 0;
+}
+
+/**
+ * 현재 영상 풀과 필터로부터 셔플된 재생 큐를 만들고 filterKey를 갱신합니다.
+ *
+ * - 위 `rebuildShuffledQueueFromPool`을 호출하고 filterKey만 갱신.
+ *
+ * @param {Array<any>} pool 채널의 전체 영상 풀 (limit 적용됨)
  * @param {string} filterKey 큐에 함께 기록할 필터 식별자
  * @returns {Array<any>} 셔플된 큐
  */
 function buildPlaybackQueueFromPool(pool, filterKey) {
-  const filtered = pool.filter(passesFilters);
-  shuffleInPlace(filtered);
-  currentPlaybackQueue = filtered.slice(0, PLAYBACK_QUEUE_SIZE);
+  rebuildShuffledQueueFromPool(pool);
   currentQueueFilterKey = filterKey;
   return currentPlaybackQueue;
 }
@@ -473,9 +477,11 @@ function buildPlaybackQueueFromPool(pool, filterKey) {
 /**
  * 큐가 비어 있거나 필터가 바뀌었으면 새로 채웁니다.
  *
- * - 큐가 비어 있으면 시청 기록을 초기화한 뒤 풀에서 새 큐를 만듭니다.
- *   → 사용자가 명시한 "50개 다 재생 시 재생되었던 영상 제외 후 재추첨" 알고리즘.
- * - 채널이 바뀌었거나 풀 자체가 비어 있으면 큐를 비웁니다.
+ * - 필터가 바뀌면 풀 전체를 다시 셔플해서 큐를 새로 만듭니다.
+ *   (시청 기록은 그대로 두므로 이전에 본 영상은 새로 큐에서도 빠집니다.)
+ * - 큐가 비어 있고 풀에 후보가 남아 있으면 풀을 다시 셔플해서 큐를 채웁니다.
+ *   (이미 본 영상은 자연스럽게 제외됩니다.)
+ * - 풀 자체가 비어 있으면 큐도 비웁니다.
  */
 function ensurePlaybackQueue() {
   const filterKey = buildFilterKey();
@@ -486,17 +492,14 @@ function ensurePlaybackQueue() {
     return;
   }
 
-  // 필터가 바뀌었으면 풀의 시작점부터 처음부터 다시 채웁니다.
+  // 필터가 바뀌었으면 풀의 시작점부터 다시 셔플해서 채웁니다.
   if (filterKey !== currentQueueFilterKey) {
-    currentPoolIndex = 0;
     buildPlaybackQueueFromPool(currentCandidatePool, filterKey);
     return;
   }
 
-  // 큐가 비어 있으면 시청 기록을 초기화한 뒤 풀에서 새 큐를 만듭니다.
+  // 큐가 비어 있으면 풀에서 시청 기록 제외하고 다시 셔플해서 채웁니다.
   if (currentPlaybackQueue.length === 0) {
-    clearPlayedVideoIds();
-    currentPoolIndex = 0;
     buildPlaybackQueueFromPool(currentCandidatePool, filterKey);
     return;
   }
@@ -508,8 +511,8 @@ function ensurePlaybackQueue() {
 /**
  * 현재 재생 큐에서 다음에 재생할 영상을 꺼냅니다.
  *
- * - 큐가 비어 있으면 시청 기록을 초기화한 뒤 큐를 다시 채웁니다.
- * - 그래도 후보가 없으면 null 을 반환합니다.
+ * - ensurePlaybackQueue가 큐를 (필터 변경 / 큐 비었을 때) 자동 보충합니다.
+ * - 그래도 후보가 없으면 null을 반환합니다.
  *
  * @returns {any | null} 다음 영상 또는 null
  */
@@ -518,16 +521,8 @@ function takeNextFromQueue() {
 
   if (currentPlaybackQueue.length === 0) return null;
 
-  // 큐에서 가장 먼저 추가된 영상을 꺼냅니다.
-  const next = currentPlaybackQueue.shift();
-
-  // 큐가 비어졌으면 다음 50개를 풀에서 가져옵니다.
-  if (currentPlaybackQueue.length === 0 && currentCandidatePool.length > currentPoolIndex) {
-    currentPlaybackQueue = currentCandidatePool.slice(currentPoolIndex, currentPoolIndex + PLAYBACK_QUEUE_SIZE);
-    currentPoolIndex += PLAYBACK_QUEUE_SIZE;
-  }
-
-  return next;
+  // 큐의 가장 앞 영상을 꺼냅니다 (이미 시청 기록 제외된 셔플 큐).
+  return currentPlaybackQueue.shift();
 }
 
 /**
@@ -1210,7 +1205,6 @@ async function loadRandomVideo() {
 /**
  * 현재 후보 풀 + 필터에서 다음에 재생할 영상을 큐에서 꺼내 재생합니다.
  *
- * - 큐가 비어 있으면 자동으로 시청 기록을 초기화한 뒤 큐를 새로 채웁니다.
  * - 후보가 아예 없으면 상태 메시지로 안내하고 종료합니다.
  */
 function pickAndPlayNext() {
@@ -1218,7 +1212,10 @@ function pickAndPlayNext() {
   ensurePlaybackQueue();
 
   if (currentPlaybackQueue.length === 0) {
-    setStatus("필터 조건에 맞는 영상이 없습니다. 제외 옵션을 끄거나 다른 핸들을 시도해 보세요.");
+    const hint = Number.isFinite(currentVideoCount)
+      ? `최신 ${currentVideoCount}개의 영상을 모두 재생했거나 필터 조건에 맞는 영상이 없습니다. 필터를 조정하거나 다른 핸들을 시도해 보세요.`
+      : "필터 조건에 맞는 영상이 없습니다. 제외 옵션을 끄거나 다른 핸들을 시도해 보세요.";
+    setStatus(hint);
     return;
   }
 
