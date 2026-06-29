@@ -37,6 +37,7 @@ let currentChannelHandle = "";
 let currentChannel = null;
 let currentVideoId = "";
 let currentVideos = [];
+let currentCandidatePool = [];
 let currentPlaylistId = "";
 let currentNextPageToken = null;
 let isLoading = false;
@@ -419,6 +420,33 @@ async function fetchAllVideosFromPlaylist(playlistId, pageToken = '') {
 
   const data = await response.json();
   return { videos: data.videos, nextPageToken: data.nextPageToken || null };
+}
+
+/**
+ * 업로드 재생목록의 모든 영상을 페이지네이션으로 가져옵니다.
+ *
+ * - 각 페이지가 도착할 때마다 `onProgress({ loaded, hasMore })` 호출
+ * - `nextPageToken`이 없을 때까지 반복
+ *
+ * @param {string} playlistId 업로드 재생목록 ID
+ * @param {(progress: { loaded: number, hasMore: boolean }) => void} [onProgress] 진행 콜백
+ * @returns {Promise<Array<any>>} 전체 영상 배열
+ */
+async function fetchAllCandidateVideos(playlistId, onProgress) {
+  const allVideos = [];
+  let pageToken = '';
+  let hasMore = true;
+  const notify = typeof onProgress === 'function' ? onProgress : null;
+
+  while (hasMore) {
+    const { videos, nextPageToken } = await fetchAllVideosFromPlaylist(playlistId, pageToken);
+    allVideos.push(...videos);
+    hasMore = Boolean(nextPageToken);
+    pageToken = nextPageToken || '';
+    if (notify) notify({ loaded: allVideos.length, hasMore });
+  }
+
+  return allVideos;
 }
 
 // ── YouTube embed iframe 직접 postMessage 통신 ──────────────────────────
@@ -831,35 +859,64 @@ async function loadRandomVideo() {
       return;
     }
 
-    const { videos, nextPageToken } = await fetchAllVideosFromPlaylist(uploadsPlaylistId);
-    currentVideos = videos;
-    currentNextPageToken = nextPageToken; // ← 저장
+    // 첫 페이지를 먼저 받아서 그리드를 즉시 렌더 (사용자가 빠르게 첫 결과를 봄)
+    const firstPage = await fetchAllVideosFromPlaylist(uploadsPlaylistId);
+    currentVideos = firstPage.videos;
+    currentNextPageToken = firstPage.nextPageToken; // ← 저장
+    currentCandidatePool = [...firstPage.videos];
     renderVideoGrid();
 
-    if (!videos.length) {
+    if (!firstPage.videos.length) {
       setStatus("재생할 영상을 찾지 못했습니다.");
       return;
     }
 
-    const filtered = filterVideos(videos);
+    // 후보 풀의 첫 페이지에서 즉시 후보가 있으면 바로 렌더 가능하지만,
+    // 사용자가 원하는 것은 "전체 영상"에서의 랜덤이므로 후보 풀을 끝까지 채운다.
+    const totalProgress = { loaded: firstPage.videos.length, hasMore: Boolean(firstPage.nextPageToken) };
+    setStatus(buildCandidateLoadMessage(totalProgress));
 
-    if (!filtered.length) {
-      setStatus("필터 조건에 맞는 영상이 없습니다. 제외 옵션을 끄거나 다른 핸들을 시도해 보세요.");
+    const finishWithPool = (pool) => {
+      const filtered = filterVideos(pool);
+
+      if (!filtered.length) {
+        setStatus("필터 조건에 맞는 영상이 없습니다. 제외 옵션을 끄거나 다른 핸들을 시도해 보세요.");
+        return;
+      }
+
+      const candidates = getUnplayedCandidates(filtered);
+
+      if (!candidates.length) {
+        setAllPlayedStatus();
+        return;
+      }
+
+      const random = candidates[Math.floor(Math.random() * candidates.length)];
+      savePlayedVideoId(random.videoId);
+      setStatus(`재생 중: ${random.title}`);
+      playVideo(random.videoId);
+      startedPlayback = true;
+    };
+
+    if (!firstPage.nextPageToken) {
+      // 단일 페이지에 모든 영상이 들어있는 경우
+      finishWithPool(currentCandidatePool);
       return;
     }
 
-    let candidates = getUnplayedCandidates(filtered);
-
-    if (!candidates.length) {
-      setAllPlayedStatus();
-      return;
+    // 백그라운드로 나머지 페이지 누적 → 끝나면 즉시 재생
+    try {
+      const allVideos = await fetchAllCandidateVideos(uploadsPlaylistId, (progress) => {
+        setStatus(buildCandidateLoadMessage(progress));
+      });
+      currentCandidatePool = allVideos;
+      // 마지막 pageToken도 동기화 (loadMoreVideos 와 일관성 유지)
+      finishWithPool(currentCandidatePool);
+    } catch (error) {
+      console.error('Error fetching remaining videos:', error);
+      // 백그라운드 fetch 실패 시에도 첫 페이지 풀에서는 재생 시도
+      finishWithPool(currentCandidatePool);
     }
-
-    const random = candidates[Math.floor(Math.random() * candidates.length)];
-    savePlayedVideoId(random.videoId);
-    setStatus(`재생 중: ${random.title}`);
-    playVideo(random.videoId);
-    startedPlayback = true;
   } catch (error) {
     console.error(error);
     if (error.status === 404) {
@@ -873,6 +930,19 @@ async function loadRandomVideo() {
       setPlaybackControlsLoading(false);
     }
   }
+}
+
+/**
+ * 후보 풀 누적 진행 상태를 한국어 메시지로 변환합니다.
+ *
+ * @param {{ loaded: number, hasMore: boolean }} progress 진행 상태
+ * @returns {string} 표시 메시지
+ */
+function buildCandidateLoadMessage(progress) {
+  if (progress.hasMore) {
+    return `영상 목록 불러오는 중... (${progress.loaded}개+)`;
+  }
+  return `영상 ${progress.loaded}개 로드 완료, 랜덤 선택 중...`;
 }
 
 form.addEventListener("submit", async (e) => {
