@@ -36,22 +36,28 @@
 
       <aside class="sidePanel">
         <form id="creatorForm" class="card sideCard" novalidate>
-
-          <label>
-            YouTube 채널 핸들 (@없이 입력) <span class="requiredMark" aria-label="필수 입력">*</span>
-            <div class="inputWrap">
-              <input id="channelInput" type="text" placeholder="creatorname" required />
-              <button type="button" id="clearChannelBtn" class="clearBtn" aria-label="입력 지우기" hidden>×</button>
-            </div>
-          </label>
-
           <div class="filterGroups">
             <section class="filterSection">
+
+              <label>
+                <div class="filterSection__head">
+                  <div class="filterSection__step">1</div>
+                  <div>
+                    <h2 class="filterSection__title">YouTube 채널 핸들 (@없이 입력) <span class="requiredMark"
+                        aria-label="필수 입력">*</span></h2>
+                    <div class="inputWrap">
+                      <input id="channelInput" type="text" placeholder="creatorname" required />
+                      <button type="button" id="clearChannelBtn" class="clearBtn" aria-label="입력 지우기" hidden>×</button>
+                    </div>
+                  </div>
+                </div>
+              </label>
+
               <div class="filterSection__head">
-                <div class="filterSection__step">1</div>
+                <div class="filterSection__step">2</div>
                 <div>
-                  <h2 class="filterSection__title">먼저 재생 방식을 고르세요</h2>
-                  <p class="filterSection__desc">랜덤은 섞어서 재생하고, 순서대로는 업로드 시간 기준으로 재생합니다.</p>
+                  <h2 class="filterSection__title">재생 방식 <span class="requiredMark" aria-label="필수 입력">*</span></h2>
+                  <!-- <p class="filterSection__desc">랜덤은 섞어서 재생하고, 순서대로는 업로드 시간 기준으로 재생합니다.</p> -->
                 </div>
               </div>
 
@@ -95,10 +101,9 @@
 
             <section class="filterSection">
               <div class="filterSection__head">
-                <div class="filterSection__step">2</div>
+                <div class="filterSection__step">⚙️</div>
                 <div>
-                  <h2 class="filterSection__title">가져올 영상 범위를 정하세요</h2>
-                  <p class="filterSection__desc">채널의 영상이 너무 많아 로딩이 너무 오래 걸린다면 가져올 영상의 범위를 좁힐 수 있습니다.</p>
+                  <h2 class="filterSection__title">추가 필터 (optional)</h2>
                 </div>
               </div>
 
@@ -125,14 +130,6 @@
             </section>
 
             <section class="filterSection">
-              <div class="filterSection__head">
-                <div class="filterSection__step">3</div>
-                <div>
-                  <h2 class="filterSection__title">제외할 영상을 고르세요</h2>
-                  <p class="filterSection__desc">Shorts, Live, 조회수 범위를 지정하여 제외할 수 있습니다.</p>
-                </div>
-              </div>
-
               <fieldset class="filter-group filter-group--shorts is-disabled" id="exclude60sFilterGroup">
                 <legend class="filter-group__legendRow">
                   <label class="filter-group__switchLabel">
