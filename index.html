@@ -99,6 +99,8 @@
               </fieldset>
             </section>
 
+            <div class="divider" aria-hidden="true"></div>
+
             <section class="filterSection">
               <div class="filterSection__head">
                 <div class="filterSection__step">⚙️</div>
@@ -218,27 +220,6 @@
       </div>
     </section>
 
-
-    <section class="card directPlayCard">
-      <div class="directPlay">
-        <div class="filterSection__head">
-          <div class="filterSection__step">또는</div>
-          <div>
-            <h2 class="filterSection__title">직접 링크 재생</h2>
-            <p class="filterSection__desc">영상 링크를 입력하여 직접 재생할 수도 있습니다.</p>
-          </div>
-        </div>
-        <div class="inputWrap">
-          <input id="videoUrlInput" type="url" placeholder="https://youtu.be/..." />
-          <button type="button" id="clearVideoUrlBtn" class="clearBtn" aria-label="영상 링크 지우기" hidden>×</button>
-        </div>
-
-        <div class="actions">
-          <button type="button" id="playUrlBtn" class="btn-primary">링크 영상 재생</button>
-        </div>
-      </div>
-    </section>
-
     <!-- 쿠팡 파트너스 배너 -->
     <section class="ad-section" aria-label="쿠팡 파트너스 배너">
       <div class="ad-card">
@@ -259,6 +240,26 @@
               "tsource": ""
             });
           </script>
+        </div>
+      </div>
+    </section>
+
+    <section class="card directPlayCard">
+      <div class="directPlay">
+        <div class="filterSection__head">
+          <div class="filterSection__step">또는</div>
+          <div>
+            <h2 class="filterSection__title">직접 링크 재생</h2>
+            <p class="filterSection__desc">영상 링크를 입력하여 직접 재생할 수도 있습니다.</p>
+          </div>
+        </div>
+        <div class="inputWrap">
+          <input id="videoUrlInput" type="url" placeholder="https://youtu.be/..." />
+          <button type="button" id="clearVideoUrlBtn" class="clearBtn" aria-label="영상 링크 지우기" hidden>×</button>
+        </div>
+
+        <div class="actions">
+          <button type="button" id="playUrlBtn" class="btn-primary">링크 영상 재생</button>
         </div>
       </div>
     </section>
