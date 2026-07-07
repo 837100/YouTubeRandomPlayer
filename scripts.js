@@ -203,6 +203,7 @@ function clearChannelInput() {
   currentChannelHandle = "";
   currentChannel = null;
   currentVideos = [];
+  currentNextPageToken = null;
   resetPlaybackQueueForNewChannel();
   saveChannelHandle("");
   updateClearBtnVisibility();
@@ -552,14 +553,20 @@ function buildPlaybackQueueFromPool(pool, filterKey) {
 
 /**
  * 현재 후보 풀을 기준으로 그리드에 보여줄 영상 목록을 갱신합니다.
+ *
+ * - 풀에 들어있는 모든 영상을 그대로 그리드에 표시합니다.
+ *   서버에서 받은 풀은 `currentVideoCount`(최신 N개) 또는 전체 영상 목록이므로,
+ *   필터에 의해 가져온 후보가 한 번에 300개면 그리드에도 300개가 표시됩니다.
+ * - 표시 순서는 `buildPreviewVideosFromPool`이 정하는 재생 순서(랜덤: 셔플, 순차: 최신/오래된)와 동일합니다.
  */
 function refreshCurrentVideosPreview() {
   if (!currentCandidatePool.length) {
     currentVideos = [];
+    renderVideoGrid();
     return;
   }
 
-  currentVideos = buildPreviewVideosFromPool(currentCandidatePool).slice(0, 50);
+  currentVideos = buildPreviewVideosFromPool(currentCandidatePool);
   renderVideoGrid();
 }
 
@@ -1270,9 +1277,11 @@ async function loadRandomVideo() {
       return;
     }
 
-    // 그리드 표시용: 현재 재생 방식에 맞는 첫 50개
-    currentVideos = buildPreviewVideosFromPool(pool).slice(0, 50);
-    currentNextPageToken = pool.length > 50 ? "" : null; // 풀에서 그리드 페이지네이션은 더 이상 필요 없음
+    // 그리드 표시용: 현재 풀에 있는 모든 영상을 표시 (50개 제한 없음).
+    // 필터(60초 이하 제외, Live 제외, 조회수 범위)로 가져온 후보가 그대로 그리드에 보여지며,
+    // 표시 순서는 buildPreviewVideosFromPool이 정하는 재생 순서와 동일합니다.
+    currentVideos = buildPreviewVideosFromPool(pool);
+    currentNextPageToken = null; // 풀에서 그리드 페이지네이션은 더 이상 사용하지 않음
     renderVideoGrid();
 
     // 큐 빌드 + 픽업
