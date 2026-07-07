@@ -9,6 +9,9 @@ const videoCountToggleBtn = document.getElementById("videoCountToggleBtn");
 const videoCountFilterBody = document.getElementById("videoCountFilterBody");
 const videoCountInput = document.getElementById("videoCountInput");
 const videoCountError = document.getElementById("videoCountError");
+const playbackModeSelect = document.getElementById("playbackModeSelect");
+const playbackOrderSelect = document.getElementById("playbackOrderSelect");
+const playbackModeFilterGroup = document.getElementById("playbackModeFilterGroup");
 const statusEl = document.getElementById("status");
 const player = document.getElementById("player");
 const loadVideoBtn = document.getElementById("loadVideoBtn");
@@ -65,6 +68,10 @@ const AUTOPLAY_DELAY_SEC = 3;
 const VIDEO_COUNT_MIN = 1;
 const VIDEO_COUNT_MAX = 5000;
 const VIDEO_COUNT_DEFAULT = 50;
+const PLAYBACK_MODE_RANDOM = "random";
+const PLAYBACK_MODE_SEQUENTIAL = "sequential";
+const PLAYBACK_ORDER_NEWEST = "newest";
+const PLAYBACK_ORDER_OLDEST = "oldest";
 
 /**
  * 조회수 범위 필터 토글 상태. true면 입력 칸이 활성화되고 필터가 적용됩니다.
@@ -75,6 +82,16 @@ let viewCountFilterEnabled = false;
  * "최신 영상 개수" 토글 상태. true면 입력한 개수만큼만 가져오고, false면 전체에서 추첨합니다.
  */
 let videoCountFilterEnabled = false;
+
+/**
+ * 재생 방식 상태. random이면 섞어서 재생하고, sequential이면 정렬 순서대로 재생합니다.
+ */
+let playbackMode = PLAYBACK_MODE_RANDOM;
+
+/**
+ * 순서대로 재생할 때의 정렬 기준입니다.
+ */
+let playbackOrder = PLAYBACK_ORDER_NEWEST;
 
 const autoPlayToggleBtn = document.getElementById("autoPlayToggleBtn");
 const autoPlayToggleLabel = autoPlayToggleBtn.querySelector(".autoPlayToggle__label");
@@ -440,6 +457,58 @@ function shuffleInPlace(array) {
 }
 
 /**
+ * 영상의 업로드 시각을 비교용 타임스탬프로 바꿉니다.
+ *
+ * @param {any} video 영상 객체
+ * @returns {number | null} 비교용 시간값 또는 null
+ */
+function getPublishedAtTime(video) {
+  const parsed = Date.parse(video?.publishedAt || "");
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+/**
+ * 영상 배열을 업로드 시각 기준으로 정렬합니다.
+ *
+ * @param {Array<any>} videos 영상 배열
+ * @param {string} order 정렬 기준
+ * @returns {Array<any>} 정렬된 새 배열
+ */
+function sortVideosByPublishedAt(videos, order) {
+  return videos.slice().sort((left, right) => {
+    const leftTime = getPublishedAtTime(left);
+    const rightTime = getPublishedAtTime(right);
+
+    if (leftTime === null && rightTime === null) return 0;
+    if (leftTime === null) return 1;
+    if (rightTime === null) return -1;
+
+    if (order === PLAYBACK_ORDER_OLDEST) {
+      return leftTime - rightTime;
+    }
+
+    return rightTime - leftTime;
+  });
+}
+
+/**
+ * 현재 재생 모드에 맞는 표시용 영상 배열을 만듭니다.
+ *
+ * - 랜덤 모드에서는 원래 가져온 순서를 유지합니다.
+ * - 순서대로 모드에서는 오래된순/최신순으로 재정렬합니다.
+ *
+ * @param {Array<any>} pool 전체 후보 영상 배열
+ * @returns {Array<any>} 표시용 영상 배열
+ */
+function buildPreviewVideosFromPool(pool) {
+  if (playbackMode === PLAYBACK_MODE_SEQUENTIAL) {
+    return sortVideosByPublishedAt(pool, playbackOrder);
+  }
+
+  return pool.slice();
+}
+
+/**
  * 풀에서 시청 기록을 제외한 후보를 셔플해서 큐로 적재합니다.
  *
  * - 풀의 시청 가능 후보 전부를 한 번에 셔플해서 큐로 적재합니다 (limit 풀은 ≤200이라 안전).
@@ -451,10 +520,14 @@ function shuffleInPlace(array) {
 function rebuildShuffledQueueFromPool(pool) {
   const playedIds = getPlayedVideoIds();
   const playedSet = new Set(playedIds);
-  const candidates = pool.filter(
+  let candidates = pool.filter(
     (video) => passesFilters(video) && !playedSet.has(video.videoId)
   );
-  shuffleInPlace(candidates);
+  if (playbackMode === PLAYBACK_MODE_SEQUENTIAL) {
+    candidates = sortVideosByPublishedAt(candidates, playbackOrder);
+  } else {
+    shuffleInPlace(candidates);
+  }
   currentPlaybackQueue = candidates;
   currentPoolIndex = 0;
 }
@@ -472,6 +545,19 @@ function buildPlaybackQueueFromPool(pool, filterKey) {
   rebuildShuffledQueueFromPool(pool);
   currentQueueFilterKey = filterKey;
   return currentPlaybackQueue;
+}
+
+/**
+ * 현재 후보 풀을 기준으로 그리드에 보여줄 영상 목록을 갱신합니다.
+ */
+function refreshCurrentVideosPreview() {
+  if (!currentCandidatePool.length) {
+    currentVideos = [];
+    return;
+  }
+
+  currentVideos = buildPreviewVideosFromPool(currentCandidatePool).slice(0, 50);
+  renderVideoGrid();
 }
 
 /**
@@ -969,15 +1055,17 @@ function buildFilterKey() {
   const limitPart = Number.isFinite(currentVideoCount) ? `n:${currentVideoCount}` : `n:off`;
   const shorts = exclude60sCheckbox.checked ? "1" : "0";
   const live = excludeLiveCheckbox.checked ? "1" : "0";
+  const modePart = `mode:${playbackMode}`;
+  const orderPart = playbackMode === PLAYBACK_MODE_SEQUENTIAL ? `|order:${playbackOrder}` : "";
 
   if (!viewCountFilterEnabled) {
-    return `${limitPart}|60s:${shorts}|live:${live}|vc:off`;
+    return `${limitPart}|60s:${shorts}|live:${live}|vc:off|${modePart}${orderPart}`;
   }
 
   const { min, max } = getViewCountRange();
   const minPart = min === null ? "*" : String(min);
   const maxPart = max === null ? "*" : String(max);
-  return `${limitPart}|60s:${shorts}|live:${live}|vc:${minPart}-${maxPart}`;
+  return `${limitPart}|60s:${shorts}|live:${live}|vc:${minPart}-${maxPart}|${modePart}${orderPart}`;
 }
 
 /**
@@ -1179,8 +1267,8 @@ async function loadRandomVideo() {
       return;
     }
 
-    // 그리드 표시용: 풀의 첫 50개 (기존 UX 유지)
-    currentVideos = pool.slice(0, 50);
+    // 그리드 표시용: 현재 재생 방식에 맞는 첫 50개
+    currentVideos = buildPreviewVideosFromPool(pool).slice(0, 50);
     currentNextPageToken = pool.length > 50 ? "" : null; // 풀에서 그리드 페이지네이션은 더 이상 필요 없음
     renderVideoGrid();
 
@@ -1214,9 +1302,14 @@ function pickAndPlayNext() {
   ensurePlaybackQueue();
 
   if (currentPlaybackQueue.length === 0) {
-    const hint = Number.isFinite(currentVideoCount)
-      ? `최신 ${currentVideoCount}개의 영상을 모두 재생했거나 필터 조건에 맞는 영상이 없습니다. 필터를 조정하거나 다른 핸들을 시도해 보세요.`
-      : "필터 조건에 맞는 영상이 없습니다. 제외 옵션을 끄거나 다른 핸들을 시도해 보세요.";
+    const orderLabel = playbackOrder === PLAYBACK_ORDER_OLDEST ? "오래된순" : "최신순";
+    const hint = playbackMode === PLAYBACK_MODE_SEQUENTIAL
+      ? (Number.isFinite(currentVideoCount)
+          ? `${orderLabel}으로 재생할 수 있는 최신 ${currentVideoCount}개의 영상이 없거나 필터 조건에 맞는 영상이 없습니다. 필터를 조정하거나 다른 핸들을 시도해 보세요.`
+          : `${orderLabel}으로 재생할 수 있는 영상이 없거나 필터 조건에 맞는 영상이 없습니다. 필터를 조정하거나 다른 핸들을 시도해 보세요.`)
+      : (Number.isFinite(currentVideoCount)
+          ? `최신 ${currentVideoCount}개의 영상을 모두 재생했거나 필터 조건에 맞는 영상이 없습니다. 필터를 조정하거나 다른 핸들을 시도해 보세요.`
+          : "필터 조건에 맞는 영상이 없습니다. 제외 옵션을 끄거나 다른 핸들을 시도해 보세요.");
     setStatus(hint);
     finishPlaybackLoading();
     return false;
@@ -1285,6 +1378,46 @@ channelInput.addEventListener("input", () => {
   el.addEventListener("input", onVideoCountInputChange);
   el.addEventListener("change", onVideoCountInputChange);
 });
+
+/**
+ * 재생 방식 선택값을 적용합니다.
+ *
+ * @param {string} mode 선택한 재생 방식
+ */
+function setPlaybackMode(mode) {
+  playbackMode = mode === PLAYBACK_MODE_SEQUENTIAL ? PLAYBACK_MODE_SEQUENTIAL : PLAYBACK_MODE_RANDOM;
+  playbackModeSelect.value = playbackMode;
+  playbackOrderSelect.disabled = playbackMode !== PLAYBACK_MODE_SEQUENTIAL;
+
+  if (currentCandidatePool.length) {
+    refreshCurrentVideosPreview();
+  }
+}
+
+/**
+ * 순서대로 재생할 때의 정렬 기준을 적용합니다.
+ *
+ * @param {string} order 정렬 기준
+ */
+function setPlaybackOrder(order) {
+  playbackOrder = order === PLAYBACK_ORDER_OLDEST ? PLAYBACK_ORDER_OLDEST : PLAYBACK_ORDER_NEWEST;
+  playbackOrderSelect.value = playbackOrder;
+
+  if (currentCandidatePool.length) {
+    refreshCurrentVideosPreview();
+  }
+}
+
+playbackModeSelect.addEventListener("change", () => {
+  setPlaybackMode(playbackModeSelect.value);
+});
+
+playbackOrderSelect.addEventListener("change", () => {
+  setPlaybackOrder(playbackOrderSelect.value);
+});
+
+setPlaybackMode(playbackModeSelect.value);
+setPlaybackOrder(playbackOrderSelect.value);
 
 // 클리어 버튼 동작
 clearVideoUrlBtn.addEventListener("click", clearVideoUrlInput);

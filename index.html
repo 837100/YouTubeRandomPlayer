@@ -48,79 +48,133 @@
           </label>
 
           <div class="filterGroups">
-            <fieldset class="filter-group filter-group--videoCount is-disabled" id="videoCountFilterGroup">
-              <legend class="filter-group__legendRow">
-                <button type="button" id="videoCountToggleBtn" class="filter-group__switch"
-                  role="switch" aria-checked="false" aria-controls="videoCountFilterBody">
-                  <span class="filter-group__switchThumb" aria-hidden="true"></span>
-                </button>
-                <span class="filter-group__title">최신 영상 개수 제한</span>
-              </legend>
-
-              <div id="videoCountFilterBody" class="filter-group__body" hidden>
-                <div class="filter-group__row">
-                  <label class="filter-group__label" for="videoCountInput">개수</label>
-                  <input id="videoCountInput" class="filter-group__number" type="number" inputmode="numeric"
-                    min="1" max="200" step="1" placeholder="예: 50 (1~200)" value="50" disabled
-                    aria-describedby="videoCountError" />
+            <section class="filterSection">
+              <div class="filterSection__head">
+                <div class="filterSection__step">1</div>
+                <div>
+                  <h2 class="filterSection__title">먼저 재생 방식을 고르세요</h2>
+                  <p class="filterSection__desc">랜덤은 섞어서 재생하고, 순서대로는 업로드 시간 기준으로 재생합니다.</p>
                 </div>
-                <p class="filter-group__desc">ON일 때 업로드일 최신 순으로 이만큼만 가져와 추첨합니다. OFF면 전체 영상에서 추첨합니다.</p>
-                <p id="videoCountError" class="filter-group__error" hidden></p>
               </div>
-            </fieldset>
 
-            <fieldset class="filter-group filter-group--shorts is-disabled" id="exclude60sFilterGroup">
-              <legend class="filter-group__legendRow">
-                <label class="filter-group__switchLabel">
-                  <input type="checkbox" id="exclude60sCheckbox" class="filter-group__switchInput" />
-                  <span class="filter-group__switch" aria-hidden="true">
-                    <span class="filter-group__switchThumb"></span>
-                  </span>
-                </label>
-                <span class="filter-group__title">60초 이하 영상 제외</span>
-                <span class="filter-hint">(≈Shorts)</span>
-              </legend>
-              <p class="filter-group__desc">Shorts와 같은 60초 이하 영상을 제외합니다.</p>
-            </fieldset>
+              <fieldset class="filter-group filter-group--playback" id="playbackModeFilterGroup">
+                <legend class="filter-group__legendRow">
+                  <span class="filter-group__title">재생 방식</span>
+                </legend>
 
-            <fieldset class="filter-group filter-group--live is-disabled" id="excludeLiveFilterGroup">
-              <legend class="filter-group__legendRow">
-                <label class="filter-group__switchLabel">
-                  <input type="checkbox" id="excludeLiveCheckbox" class="filter-group__switchInput" />
-                  <span class="filter-group__switch" aria-hidden="true">
-                    <span class="filter-group__switchThumb"></span>
-                  </span>
-                </label>
-                <span class="filter-group__title">Live 영상 제외</span>
-              </legend>
-              <p class="filter-group__desc">현재 방송 중이거나 예정된 Live 방송을 제외합니다.</p>
-            </fieldset>
+                <div class="filter-group__body">
+                  <div class="filter-group__row">
+                    <label class="filter-group__label" for="playbackModeSelect">방식</label>
+                    <select id="playbackModeSelect" class="filter-group__select">
+                      <option value="random" selected>랜덤 재생</option>
+                      <option value="sequential">순서대로 재생</option>
+                    </select>
+                  </div>
 
-            <fieldset class="filter-group filter-group--viewCount is-disabled" id="viewCountFilterGroup">
-              <legend class="filter-group__legendRow">
-                <button type="button" id="viewCountToggleBtn" class="filter-group__switch"
-                  role="switch" aria-checked="false" aria-controls="viewCountFilterBody">
-                  <span class="filter-group__switchThumb" aria-hidden="true"></span>
-                </button>
-                <span class="filter-group__title">조회수 범위</span>
-              </legend>
-
-              <div id="viewCountFilterBody" class="filter-group__body" hidden>
-                <div class="filter-group__row">
-                  <label class="filter-group__label" for="minViewCountInput">최소</label>
-                  <input id="minViewCountInput" class="filter-group__number" type="number" inputmode="numeric"
-                    min="0" step="1" placeholder="예: 10000" disabled />
+                  <div class="filter-group__row">
+                    <label class="filter-group__label" for="playbackOrderSelect">순서</label>
+                    <select id="playbackOrderSelect" class="filter-group__select" disabled>
+                      <option value="newest" selected>최신순</option>
+                      <option value="oldest">오래된순</option>
+                    </select>
+                  </div>
                 </div>
+              </fieldset>
+            </section>
 
-                <div class="filter-group__row">
-                  <label class="filter-group__label" for="maxViewCountInput">최대</label>
-                  <input id="maxViewCountInput" class="filter-group__number" type="number" inputmode="numeric"
-                    min="0" step="1" placeholder="예: 500000" disabled />
+            <section class="filterSection">
+              <div class="filterSection__head">
+                <div class="filterSection__step">2</div>
+                <div>
+                  <h2 class="filterSection__title">가져올 영상 범위를 정하세요</h2>
+                  <p class="filterSection__desc">필요할 때만 최신 영상 개수를 제한하면 됩니다. 끄면 전체 영상에서 재생합니다.</p>
                 </div>
-
-                <p id="viewCountError" class="filter-group__error" hidden></p>
               </div>
-            </fieldset>
+
+              <fieldset class="filter-group filter-group--videoCount is-disabled" id="videoCountFilterGroup">
+                <legend class="filter-group__legendRow">
+                  <button type="button" id="videoCountToggleBtn" class="filter-group__switch"
+                    role="switch" aria-checked="false" aria-controls="videoCountFilterBody">
+                    <span class="filter-group__switchThumb" aria-hidden="true"></span>
+                  </button>
+                  <span class="filter-group__title">최근 업로드만 가져오기</span>
+                </legend>
+
+                <div id="videoCountFilterBody" class="filter-group__body" hidden>
+                  <div class="filter-group__row">
+                    <label class="filter-group__label" for="videoCountInput">개수</label>
+                    <input id="videoCountInput" class="filter-group__number" type="number" inputmode="numeric"
+                      min="1" max="200" step="1" placeholder="예: 50 (1~200)" value="50" disabled
+                      aria-describedby="videoCountError" />
+                  </div>
+                  <p class="filter-group__desc">켜면 업로드일 최신 순으로 이만큼만 가져와 재생합니다.</p>
+                  <p id="videoCountError" class="filter-group__error" hidden></p>
+                </div>
+              </fieldset>
+            </section>
+
+            <section class="filterSection">
+              <div class="filterSection__head">
+                <div class="filterSection__step">3</div>
+                <div>
+                  <h2 class="filterSection__title">제외할 영상만 고르세요</h2>
+                  <p class="filterSection__desc">Shorts, Live, 조회수 범위를 필요에 맞게 제외하면 됩니다.</p>
+                </div>
+              </div>
+
+              <fieldset class="filter-group filter-group--shorts is-disabled" id="exclude60sFilterGroup">
+                <legend class="filter-group__legendRow">
+                  <label class="filter-group__switchLabel">
+                    <input type="checkbox" id="exclude60sCheckbox" class="filter-group__switchInput" />
+                    <span class="filter-group__switch" aria-hidden="true">
+                      <span class="filter-group__switchThumb"></span>
+                    </span>
+                  </label>
+                  <span class="filter-group__title">60초 이하 영상 제외</span>
+                  <span class="filter-hint">(Shorts)</span>
+                </legend>
+                <p class="filter-group__desc">60초 이하의 짧은 영상은 제외합니다.</p>
+              </fieldset>
+
+              <fieldset class="filter-group filter-group--live is-disabled" id="excludeLiveFilterGroup">
+                <legend class="filter-group__legendRow">
+                  <label class="filter-group__switchLabel">
+                    <input type="checkbox" id="excludeLiveCheckbox" class="filter-group__switchInput" />
+                    <span class="filter-group__switch" aria-hidden="true">
+                      <span class="filter-group__switchThumb"></span>
+                    </span>
+                  </label>
+                  <span class="filter-group__title">Live 영상 제외</span>
+                </legend>
+                <p class="filter-group__desc">현재 방송 중이거나 예정된 Live 영상은 제외합니다.</p>
+              </fieldset>
+
+              <fieldset class="filter-group filter-group--viewCount is-disabled" id="viewCountFilterGroup">
+                <legend class="filter-group__legendRow">
+                  <button type="button" id="viewCountToggleBtn" class="filter-group__switch"
+                    role="switch" aria-checked="false" aria-controls="viewCountFilterBody">
+                    <span class="filter-group__switchThumb" aria-hidden="true"></span>
+                  </button>
+                  <span class="filter-group__title">조회수 범위</span>
+                </legend>
+
+                <div id="viewCountFilterBody" class="filter-group__body" hidden>
+                  <div class="filter-group__row">
+                    <label class="filter-group__label" for="minViewCountInput">최소</label>
+                    <input id="minViewCountInput" class="filter-group__number" type="number" inputmode="numeric"
+                      min="0" step="1" placeholder="예: 10000" disabled />
+                  </div>
+
+                  <div class="filter-group__row">
+                    <label class="filter-group__label" for="maxViewCountInput">최대</label>
+                    <input id="maxViewCountInput" class="filter-group__number" type="number" inputmode="numeric"
+                      min="0" step="1" placeholder="예: 500000" disabled />
+                  </div>
+
+                  <p id="viewCountError" class="filter-group__error" hidden></p>
+                </div>
+              </fieldset>
+            </section>
           </div>
 
           <div class="actions">
