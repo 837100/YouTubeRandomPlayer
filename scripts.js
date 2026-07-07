@@ -9,9 +9,12 @@ const videoCountToggleBtn = document.getElementById("videoCountToggleBtn");
 const videoCountFilterBody = document.getElementById("videoCountFilterBody");
 const videoCountInput = document.getElementById("videoCountInput");
 const videoCountError = document.getElementById("videoCountError");
-const playbackModeSelect = document.getElementById("playbackModeSelect");
+const playbackRandomCheckbox = document.getElementById("playbackRandomCheckbox");
+const playbackSequentialCheckbox = document.getElementById("playbackSequentialCheckbox");
 const playbackOrderSelect = document.getElementById("playbackOrderSelect");
-const playbackModeFilterGroup = document.getElementById("playbackModeFilterGroup");
+const playbackOrderBody = document.getElementById("playbackOrderBody");
+const playbackRandomFilterGroup = document.getElementById("playbackRandomFilterGroup");
+const playbackSequentialFilterGroup = document.getElementById("playbackSequentialFilterGroup");
 const statusEl = document.getElementById("status");
 const player = document.getElementById("player");
 const loadVideoBtn = document.getElementById("loadVideoBtn");
@@ -54,7 +57,7 @@ let currentNextPageToken = null;
 let currentVideoCount = null; // null = 토글 OFF(전체 페이지네이션), number = 토글 ON(최신 N개)
 let isLoading = false;
 let playerLoadTimeoutId = null;
-const LOAD_BTN_DEFAULT_LABEL = "랜덤 영상 재생";
+const LOAD_BTN_DEFAULT_LABEL = "영상 재생";
 const LOAD_BTN_LOADING_LABEL = "불러오는 중...";
 const PLAY_URL_BTN_DEFAULT_LABEL = "링크 영상 재생";
 const PLAY_URL_BTN_LOADING_LABEL = "영상 불러오는 중...";
@@ -1386,8 +1389,22 @@ channelInput.addEventListener("input", () => {
  */
 function setPlaybackMode(mode) {
   playbackMode = mode === PLAYBACK_MODE_SEQUENTIAL ? PLAYBACK_MODE_SEQUENTIAL : PLAYBACK_MODE_RANDOM;
-  playbackModeSelect.value = playbackMode;
+  if (playbackRandomCheckbox) {
+    playbackRandomCheckbox.checked = playbackMode === PLAYBACK_MODE_RANDOM;
+  }
+  if (playbackSequentialCheckbox) {
+    playbackSequentialCheckbox.checked = playbackMode === PLAYBACK_MODE_SEQUENTIAL;
+  }
+  if (playbackRandomFilterGroup) {
+    playbackRandomFilterGroup.classList.toggle("is-disabled", playbackMode !== PLAYBACK_MODE_RANDOM);
+  }
+  if (playbackSequentialFilterGroup) {
+    playbackSequentialFilterGroup.classList.toggle("is-disabled", playbackMode !== PLAYBACK_MODE_SEQUENTIAL);
+  }
   playbackOrderSelect.disabled = playbackMode !== PLAYBACK_MODE_SEQUENTIAL;
+  if (playbackOrderBody) {
+    playbackOrderBody.hidden = playbackMode !== PLAYBACK_MODE_SEQUENTIAL;
+  }
 
   if (currentCandidatePool.length) {
     refreshCurrentVideosPreview();
@@ -1408,16 +1425,40 @@ function setPlaybackOrder(order) {
   }
 }
 
-playbackModeSelect.addEventListener("change", () => {
-  setPlaybackMode(playbackModeSelect.value);
-});
+function handlePlaybackRandomChange() {
+  if (!playbackRandomCheckbox.checked) {
+    playbackRandomCheckbox.checked = true;
+    playbackSequentialCheckbox.checked = false;
+    setPlaybackMode(PLAYBACK_MODE_RANDOM);
+    return;
+  }
+
+  playbackSequentialCheckbox.checked = false;
+  setPlaybackMode(PLAYBACK_MODE_RANDOM);
+}
+
+function handlePlaybackSequentialChange() {
+  if (!playbackSequentialCheckbox.checked) {
+    playbackSequentialCheckbox.checked = true;
+    playbackRandomCheckbox.checked = false;
+    setPlaybackMode(PLAYBACK_MODE_SEQUENTIAL);
+    return;
+  }
+
+  playbackRandomCheckbox.checked = false;
+  setPlaybackMode(PLAYBACK_MODE_SEQUENTIAL);
+}
+
+playbackRandomCheckbox.addEventListener("change", handlePlaybackRandomChange);
+playbackSequentialCheckbox.addEventListener("change", handlePlaybackSequentialChange);
+
+setPlaybackMode(PLAYBACK_MODE_RANDOM);
+
+setPlaybackOrder(playbackOrderSelect.value);
 
 playbackOrderSelect.addEventListener("change", () => {
   setPlaybackOrder(playbackOrderSelect.value);
 });
-
-setPlaybackMode(playbackModeSelect.value);
-setPlaybackOrder(playbackOrderSelect.value);
 
 // 클리어 버튼 동작
 clearVideoUrlBtn.addEventListener("click", clearVideoUrlInput);

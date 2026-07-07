@@ -436,6 +436,14 @@ body.cinema .sideCard .clearBtn {
   cursor: not-allowed;
 }
 
+.filter-group--playback.is-disabled {
+  opacity: 0.55;
+}
+
+.filter-group--playback:not(.is-disabled) {
+  opacity: 1;
+}
+
 .filter-group__legend {
   padding: 0 6px;
   color: var(--muted);
