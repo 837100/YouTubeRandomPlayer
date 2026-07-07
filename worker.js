@@ -185,6 +185,12 @@ async function handleResolveChannel(request, apiKey) {
 /**
  * 채널 응답을 클라이언트가 쓰기 좋은 형태로 정규화합니다.
  *
+ * - `thumbnail`은 항상 채널의 프로필 사진(원형 아바타)을 가리킵니다.
+ *   YouTube API는 `snippet.thumbnails`에서 `default`/`medium`/`high` 세 크기를 주는데,
+ *   `brandingSettings.image.bannerExternalUrl`은 채널 페이지 상단의 직사각형 배너이므로
+ *   절대 thumbnail로 쓰면 안 됩니다.
+ * - 채널 배너가 필요해지면 `banner` 필드를 따로 쓰세요.
+ *
  * @param {any} channelItem YouTube API의 channels 응답 item
  * @returns {{
  *   id: string,
@@ -192,6 +198,7 @@ async function handleResolveChannel(request, apiKey) {
  *   handle: string,
  *   customUrl: string,
  *   thumbnail: string | null,
+ *   banner: string | null,
  *   subscribers: number | null,
  *   hiddenSubscribers: boolean,
  *   videoCount: number | null,
@@ -204,10 +211,13 @@ function normalizeChannel(channelItem) {
   const branding = channelItem.brandingSettings || {};
 
   const handle = String(snippet.customUrl || '').replace(/^@+/, '') || '';
-  const thumbnail =
-    branding.image?.bannerExternalUrl ||
+  const profileThumb =
+    snippet.thumbnails?.high?.url ||
     snippet.thumbnails?.medium?.url ||
     snippet.thumbnails?.default?.url ||
+    null;
+  const banner =
+    branding.image?.bannerExternalUrl ||
     null;
 
   const hiddenSubscribers = statistics.hiddenSubscriberCount === true;
@@ -226,7 +236,8 @@ function normalizeChannel(channelItem) {
     title: snippet.title || '',
     handle,
     customUrl: snippet.customUrl || '',
-    thumbnail,
+    thumbnail: profileThumb,
+    banner,
     subscribers,
     hiddenSubscribers,
     videoCount: videoCountRaw !== undefined && videoCountRaw !== '' ? Number(videoCountRaw) : null,
