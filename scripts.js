@@ -43,6 +43,11 @@ const videoGridCard = document.getElementById("videoGridCard");
 const videoGrid = document.getElementById("videoGrid");
 const videoGridEmpty = document.getElementById("videoGridEmpty");
 const gridCount = document.getElementById("gridCount");
+const favoritesTitle = document.getElementById("favoritesTitle");
+const favoritesList = document.getElementById("favoritesList");
+const favoriteToggleBtn = document.getElementById("favoriteToggleBtn");
+
+const FAVORITES_KEY = "favoriteChannels";
 
 let currentChannelHandle = "";
 let currentChannel = null;
@@ -875,6 +880,132 @@ function formatDurationShort(seconds) {
 }
 
 /**
+ * 로컬 스토리지에서 즐겨찾는 채널 목록을 불러옵니다.
+ *
+ * @returns {Array<{handle: string, title: string, thumbnail: string | null}>} 즐겨찾는 채널 배열
+ */
+function getFavorites() {
+  try {
+    const raw = localStorage.getItem(FAVORITES_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch (error) {
+    return [];
+  }
+}
+
+/**
+ * 주어진 채널 정보를 즐겨찾기에 추가합니다.
+ *
+ * @param {{handle: string, title: string, thumbnail: string | null}} channel 채널 정보
+ */
+function saveFavorite(channel) {
+  if (!channel || !channel.handle) return;
+  try {
+    const favorites = getFavorites();
+    const handleNormalized = String(channel.handle).trim().toLowerCase();
+    const exists = favorites.some((fav) => String(fav.handle).trim().toLowerCase() === handleNormalized);
+    if (!exists) {
+      favorites.push({
+        handle: channel.handle,
+        title: channel.title,
+        thumbnail: channel.thumbnail
+      });
+      localStorage.setItem(FAVORITES_KEY, JSON.stringify(favorites));
+    }
+  } catch (error) {
+    // 무시
+  }
+}
+
+/**
+ * 주어진 핸들의 채널을 즐겨찾기에서 제거합니다.
+ *
+ * @param {string} handle 채널 핸들
+ */
+function removeFavorite(handle) {
+  if (!handle) return;
+  try {
+    const favorites = getFavorites();
+    const handleNormalized = String(handle).trim().toLowerCase();
+    const filtered = favorites.filter((fav) => String(fav.handle).trim().toLowerCase() !== handleNormalized);
+    localStorage.setItem(FAVORITES_KEY, JSON.stringify(filtered));
+  } catch (error) {
+    // 무시
+  }
+}
+
+/**
+ * 주어진 핸들의 채널이 즐겨찾기에 등록되어 있는지 여부를 확인합니다.
+ *
+ * @param {string} handle 채널 핸들
+ * @returns {boolean} 즐겨찾기 여부
+ */
+function isFavorite(handle) {
+  if (!handle) return false;
+  const favorites = getFavorites();
+  const handleNormalized = String(handle).trim().toLowerCase();
+  return favorites.some((fav) => String(fav.handle).trim().toLowerCase() === handleNormalized);
+}
+
+/**
+ * 즐겨찾기 칩 목록을 렌더링합니다.
+ */
+function renderQuickLinks() {
+  const favorites = getFavorites();
+
+  // 즐겨찾기 렌더링
+  if (favorites.length > 0) {
+    favoritesTitle.hidden = false;
+    favoritesList.hidden = false;
+    favoritesList.replaceChildren();
+
+    favorites.forEach((fav) => {
+      const chip = document.createElement("button");
+      chip.type = "button";
+      chip.className = "chipBtn";
+      chip.dataset.handle = fav.handle;
+
+      if (fav.thumbnail) {
+        const thumb = document.createElement("img");
+        thumb.src = fav.thumbnail;
+        thumb.className = "chipBtn__thumb";
+        thumb.alt = "";
+        chip.appendChild(thumb);
+      }
+
+      const label = document.createElement("span");
+      label.textContent = fav.title || fav.handle;
+      chip.appendChild(label);
+
+      favoritesList.appendChild(chip);
+    });
+  } else {
+    favoritesTitle.hidden = true;
+    favoritesList.hidden = true;
+    favoritesList.replaceChildren();
+  }
+}
+
+/**
+ * 즐겨찾기 칩이나 추천 칩을 클릭했을 때 해당 크리에이터로 영상을 즉시 재생합니다.
+ *
+ * @param {string} handle 채널 핸들
+ */
+async function loadChannelFromChip(handle) {
+  if (isLoading) {
+    setStatus("현재 영상이 로드 중입니다. 잠시만 기다려주세요.");
+    return;
+  }
+  channelInput.value = handle;
+  currentChannelHandle = handle;
+  saveChannelHandle(handle);
+  updateClearBtnVisibility();
+  await loadRandomVideo();
+}
+
+/**
  * 채널 통계 바를 그립니다.
  *
  * @param {{
@@ -924,6 +1055,11 @@ function renderChannelBar(channel) {
 
   channelStatVideos.textContent = `영상 ${formatStatNumber(channel.videoCount)}`;
   channelStatViews.textContent = `조회수 ${formatStatNumber(channel.viewCount)}`;
+
+  // 즐겨찾기 버튼 상태 업데이트
+  const fav = isFavorite(channel.handle);
+  favoriteToggleBtn.setAttribute("aria-pressed", String(fav));
+  favoriteToggleBtn.textContent = fav ? "★" : "☆";
 
   channelBar.hidden = false;
 }
@@ -1773,3 +1909,33 @@ document.addEventListener("keydown", (e) => {
 });
 
 document.getElementById("loadMoreBtn").addEventListener("click", loadMoreVideos);
+
+// 즐겨찾기 버튼 클릭 이벤트 리스너
+favoriteToggleBtn.addEventListener("click", () => {
+  if (!currentChannel || !currentChannel.handle) return;
+
+  const handle = currentChannel.handle;
+  if (isFavorite(handle)) {
+    removeFavorite(handle);
+    favoriteToggleBtn.setAttribute("aria-pressed", "false");
+    favoriteToggleBtn.textContent = "☆";
+  } else {
+    saveFavorite(currentChannel);
+    favoriteToggleBtn.setAttribute("aria-pressed", "true");
+    favoriteToggleBtn.textContent = "★";
+  }
+  renderQuickLinks();
+});
+
+// 즐겨찾는 채널 칩 클릭 리스너 (이벤트 위임)
+favoritesList.addEventListener("click", (event) => {
+  const chip = event.target.closest(".chipBtn");
+  if (!chip) return;
+  const handle = chip.dataset.handle;
+  if (handle) {
+    loadChannelFromChip(handle);
+  }
+});
+
+// 페이지 로드 시 즐겨찾는 채널 칩 렌더링
+renderQuickLinks();

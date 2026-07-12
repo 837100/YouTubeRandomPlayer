@@ -8,6 +8,64 @@ const CORS_HEADERS = {
 };
 
 /**
+ * 표준 로그 출력을 수행하는 로거 객체입니다.
+ */
+const logger = {
+  info(...args) {
+    console.log(`[INFO] [${new Date().toISOString()}]`, ...args);
+  },
+  warn(...args) {
+    console.warn(`[WARN] [${new Date().toISOString()}]`, ...args);
+  },
+  error(...args) {
+    console.error(`[ERROR] [${new Date().toISOString()}]`, ...args);
+  }
+};
+
+/**
+ * Cloudflare Workers 환경에 안전한 인메모리 캐시 클래스입니다.
+ */
+class SimpleCache {
+  constructor() {
+    this.store = new Map();
+  }
+
+  /**
+   * 캐시에 값을 저장합니다.
+   * @param {string} key 캐시 키
+   * @param {any} value 캐시 값
+   * @param {number} ttlSeconds 만료 시간 (초 단위)
+   */
+  set(key, value, ttlSeconds) {
+    const expiry = Date.now() + ttlSeconds * 1000;
+    this.store.set(key, { value, expiry });
+  }
+
+  /**
+   * 캐시에서 값을 가져옵니다. 만료되었다면 null을 반환하고 데이터를 지웁니다.
+   * @param {string} key 캐시 키
+   * @returns {any | null} 캐시된 값 또는 null
+   */
+  get(key) {
+    const item = this.store.get(key);
+    if (!item) return null;
+
+    if (item.expiry <= Date.now()) {
+      this.store.delete(key);
+      return null;
+    }
+
+    return item.value;
+  }
+}
+
+// 캐시 인스턴스 정의
+const channelResolveCache = new SimpleCache(); // TTL 24시간
+const channelUploadsCache = new SimpleCache(); // TTL 1시간
+const playlistVideosCache = new SimpleCache(); // TTL 10분
+
+
+/**
  * JSON 응답을 만듭니다.
  *
  * @param {unknown} body 응답 본문
@@ -107,7 +165,7 @@ async function resolveChannelByHandle(handle, apiKey) {
       const channelId = data.items?.[0]?.id;
       if (channelId) return channelId;
     } catch (error) {
-      console.error('Handle lookup failed:', error.message);
+      logger.error('Handle lookup failed:', error.message);
     }
   }
 
@@ -168,6 +226,13 @@ async function handleResolveChannel(request, apiKey) {
     return jsonResponse({ error: '채널 핸들이 필요합니다' }, 400);
   }
 
+  const cacheKey = String(handle).trim().toLowerCase();
+  const cachedChannelId = channelResolveCache.get(cacheKey);
+  if (cachedChannelId) {
+    logger.info(`[Cache Hit] resolve-channel: ${handle} -> ${cachedChannelId}`);
+    return jsonResponse({ channelId: cachedChannelId });
+  }
+
   const normalized = normalizeChannelInput(handle);
 
   const channelId =
@@ -178,6 +243,10 @@ async function handleResolveChannel(request, apiKey) {
   if (!channelId) {
     return jsonResponse({ error: '채널을 찾을 수 없습니다' }, 404);
   }
+
+  // 캐시에 저장 (24시간)
+  channelResolveCache.set(cacheKey, channelId, 86400);
+  logger.info(`[Cache Miss] resolve-channel: ${handle} -> ${channelId} (Saved to cache)`);
 
   return jsonResponse({ channelId });
 }
@@ -284,11 +353,22 @@ async function handleGetUploadsPlaylist(request, apiKey) {
     return jsonResponse({ error: '채널 ID가 필요합니다' }, 400);
   }
 
+  const cacheKey = String(channelId).trim();
+  const cachedResult = channelUploadsCache.get(cacheKey);
+  if (cachedResult) {
+    logger.info(`[Cache Hit] get-uploads-playlist: ${channelId}`);
+    return jsonResponse(cachedResult);
+  }
+
   const result = await fetchUploadsPlaylistAndChannel(channelId, apiKey);
 
   if (!result) {
     return jsonResponse({ error: '채널 정보를 찾을 수 없습니다' }, 404);
   }
+
+  // 캐시에 저장 (1시간)
+  channelUploadsCache.set(cacheKey, result, 3600);
+  logger.info(`[Cache Miss] get-uploads-playlist: ${channelId} (Saved to cache)`);
 
   return jsonResponse(result);
 }
@@ -301,15 +381,35 @@ async function handleGetUploadsPlaylist(request, apiKey) {
  * @returns {Promise<Response>} 응답
  */
 async function handleGetPlaylistVideos(request, apiKey) {
-  const { playlistId, maxResults = 50, pageToken = '' } = await readJsonBody(request);
+  const { playlistId, maxResults = 50, pageToken = '', limit: rawLimit } = await readJsonBody(request);
 
   if (!playlistId) {
     return jsonResponse({ error: '플레이리스트 ID가 필요합니다' }, 400);
   }
 
+  // limit 정규화: 1~200 사이 정수만 인정, 그 외는 무시(전체 반환 동작으로 fallback)
+  let limit = null;
+  if (rawLimit !== undefined && rawLimit !== null && rawLimit !== '') {
+    const parsed = Number(rawLimit);
+    if (Number.isFinite(parsed) && Number.isInteger(parsed) && parsed >= 1 && parsed <= 200) {
+      limit = parsed;
+    }
+  }
+
+  const cacheKey = `${playlistId}:${maxResults}:${pageToken}:${limit || 'all'}`;
+  const cachedResult = playlistVideosCache.get(cacheKey);
+  if (cachedResult) {
+    logger.info(`[Cache Hit] get-playlist-videos: key=${cacheKey}`);
+    return jsonResponse(cachedResult);
+  }
+
+  // limit이 있으면 페이지당 크기도 limit에 맞춰서 API 호출 자체를 줄임.
+  // YouTube Data API는 playlistItems 기본 정렬이 최신순이므로 별도 정렬 불필요.
+  const effectiveMax = limit !== null ? Math.min(50, limit) : Math.min(50, maxResults);
+
   const url =
     `${YT_API}/playlistItems?part=snippet,contentDetails&playlistId=${encodeURIComponent(playlistId)}` +
-    `&maxResults=${maxResults}&key=${apiKey}` +
+    `&maxResults=${effectiveMax}&key=${apiKey}` +
     (pageToken ? `&pageToken=${encodeURIComponent(pageToken)}` : '');
 
   const data = await fetchYouTubeJson(url);
@@ -356,10 +456,17 @@ async function handleGetPlaylistVideos(request, apiKey) {
     });
   }
 
-  return jsonResponse({
+  const responseData = {
     videos,
-    nextPageToken: data.nextPageToken || null
-  });
+    nextPageToken: data.nextPageToken || null,
+    limit
+  };
+
+  // 캐시에 저장 (10분)
+  playlistVideosCache.set(cacheKey, responseData, 600);
+  logger.info(`[Cache Miss] get-playlist-videos: key=${cacheKey} (Saved to cache)`);
+
+  return jsonResponse(responseData);
 }
 
 /**
@@ -405,7 +512,7 @@ export default {
       try {
         return await env.ASSETS.fetch(request);
       } catch (error) {
-        console.error('ASSETS.fetch failed:', error);
+        logger.error('ASSETS.fetch failed:', error);
       }
     }
 

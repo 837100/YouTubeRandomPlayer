@@ -49,6 +49,12 @@
                       <input id="channelInput" type="text" placeholder="creatorname" required />
                       <button type="button" id="clearChannelBtn" class="clearBtn" aria-label="입력 지우기" hidden>×</button>
                     </div>
+                    <div id="quickLinksSection" class="quickLinksSection">
+                      <div id="favoritesTitle" class="quickLinks__title" hidden>즐겨찾는 채널</div>
+                      <div id="favoritesList" class="quickLinks__chips" hidden>
+                        <!-- 즐겨찾기 채널 칩들이 여기에 렌더링됨 -->
+                      </div>
+                    </div>
                   </div>
                 </div>
               </label>
@@ -201,6 +207,7 @@
           <div class="channelBar__titleRow">
             <span id="channelTitle" class="channelBar__title"></span>
             <span id="channelHandle" class="channelBar__handle"></span>
+            <button type="button" id="favoriteToggleBtn" class="favoriteToggleBtn" aria-label="즐겨찾기 토글" aria-pressed="false">☆</button>
           </div>
           <div class="channelBar__stats">
             <span class="channelStat" id="channelStatSubs">구독자 —</span>
@@ -221,7 +228,7 @@
     </section>
 
     <!-- 쿠팡 파트너스 배너 -->
-    <section class="ad-section" aria-label="쿠팡 파트너스 배너">
+    <!-- <section class="ad-section" aria-label="쿠팡 파트너스 배너">
       <div class="ad-card">
         <div class="ad-card__head">
           <span class="ad-card__badge">AD</span>
@@ -242,7 +249,7 @@
           </script>
         </div>
       </div>
-    </section>
+    </section> -->
 
     <section class="card directPlayCard">
       <div class="directPlay">

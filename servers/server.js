@@ -10,14 +10,95 @@ const PORT = 3000;
 app.use(cors());
 app.use(express.json());
 
-// APIKEY.txt에서 API 키 읽기
-let apiKey = '';
-try {
-  apiKey = fs.readFileSync(path.join(__dirname, 'APIKEY.txt'), 'utf-8').trim();
-  console.log('✓ API 키 로드 완료');
-} catch (error) {
-  console.error('✗ API 키 파일을 찾을 수 없습니다:', error.message);
+/**
+ * 표준 로그 출력을 수행하는 로거 객체입니다.
+ */
+const logger = {
+  info(...args) {
+    console.log(`[INFO] [${new Date().toISOString()}]`, ...args);
+  },
+  warn(...args) {
+    console.warn(`[WARN] [${new Date().toISOString()}]`, ...args);
+  },
+  error(...args) {
+    console.error(`[ERROR] [${new Date().toISOString()}]`, ...args);
+  }
+};
+
+/**
+ * 인메모리 상에서 만료 시간(TTL)이 있는 데이터를 관리하는 간단한 캐시 클래스입니다.
+ */
+class SimpleCache {
+  /**
+   * SimpleCache 인스턴스를 생성합니다.
+   * @param {number} [cleanupIntervalMs=60000] 만료된 캐시 청소 주기 (기본 1분)
+   */
+  constructor(cleanupIntervalMs = 60000) {
+    this.store = new Map();
+
+    // 만료된 캐시 정기 청소 타이머 설정
+    const timer = setInterval(() => {
+      const now = Date.now();
+      for (const [key, item] of this.store.entries()) {
+        if (item.expiry <= now) {
+          this.store.delete(key);
+        }
+      }
+    }, cleanupIntervalMs);
+
+    // Node 프로세스 종료를 지연시키지 않도록 unref 처리
+    if (timer && typeof timer.unref === 'function') {
+      timer.unref();
+    }
+  }
+
+  /**
+   * 캐시에 값을 저장합니다.
+   * @param {string} key 캐시 키
+   * @param {any} value 캐시 값
+   * @param {number} ttlSeconds 만료 시간 (초 단위)
+   */
+  set(key, value, ttlSeconds) {
+    const expiry = Date.now() + ttlSeconds * 1000;
+    this.store.set(key, { value, expiry });
+  }
+
+  /**
+   * 캐시에서 값을 가져옵니다. 만료되었다면 null을 반환하고 데이터를 지웁니다.
+   * @param {string} key 캐시 키
+   * @returns {any | null} 캐시된 값 또는 null
+   */
+  get(key) {
+    const item = this.store.get(key);
+    if (!item) return null;
+
+    if (item.expiry <= Date.now()) {
+      this.store.delete(key);
+      return null;
+    }
+
+    return item.value;
+  }
 }
+
+// 캐시 인스턴스 정의
+const channelResolveCache = new SimpleCache(); // TTL 24시간
+const channelUploadsCache = new SimpleCache(); // TTL 1시간
+const playlistVideosCache = new SimpleCache(); // TTL 10분
+
+// API 키 로드 (환경변수 우선, 없을 시 APIKEY.txt 파일 fallback)
+let apiKey = process.env.YOUTUBE_API_KEY || '';
+if (apiKey) {
+  logger.info('✓ YouTube API 키 로드 완료 (환경변수)');
+} else {
+  try {
+    apiKey = fs.readFileSync(path.join(__dirname, 'APIKEY.txt'), 'utf-8').trim();
+    logger.info('✓ YouTube API 키 로드 완료 (APIKEY.txt 파일)');
+  } catch (error) {
+    logger.error('✗ API 키를 찾을 수 없습니다 (환경변수 미조회 및 APIKEY.txt 누락):', error.message);
+  }
+}
+
 
 const YT_API = "https://www.googleapis.com/youtube/v3";
 
@@ -130,7 +211,7 @@ async function resolveChannelByHandle(handle) {
       const channelId = data.items?.[0]?.id;
       if (channelId) return channelId;
     } catch (error) {
-      console.error('Handle lookup failed:', error.message);
+      logger.error('Handle lookup failed:', error.message);
     }
   }
 
@@ -159,6 +240,13 @@ app.post('/api/resolve-channel', async (req, res) => {
       return res.status(400).json({ error: '채널 핸들이 필요합니다' });
     }
 
+    const cacheKey = String(handle).trim().toLowerCase();
+    const cachedChannelId = channelResolveCache.get(cacheKey);
+    if (cachedChannelId) {
+      logger.info(`[Cache Hit] resolve-channel: ${handle} -> ${cachedChannelId}`);
+      return res.json({ channelId: cachedChannelId });
+    }
+
     const normalized = normalizeChannelInput(handle);
 
     const channelId =
@@ -170,9 +258,13 @@ app.post('/api/resolve-channel', async (req, res) => {
       return res.status(404).json({ error: '채널을 찾을 수 없습니다' });
     }
 
+    // 캐시에 저장 (24시간)
+    channelResolveCache.set(cacheKey, channelId, 86400);
+    logger.info(`[Cache Miss] resolve-channel: ${handle} -> ${channelId} (Saved to cache)`);
+
     res.json({ channelId });
   } catch (error) {
-    console.error('Error resolving channel:', error);
+    logger.error('Error resolving channel:', error);
     res.status(500).json({ error: '채널 해결 중 오류 발생' });
   }
 });
@@ -256,15 +348,26 @@ app.post('/api/get-uploads-playlist', async (req, res) => {
       return res.status(400).json({ error: '채널 ID가 필요합니다' });
     }
 
+    const cacheKey = String(channelId).trim();
+    const cachedResult = channelUploadsCache.get(cacheKey);
+    if (cachedResult) {
+      logger.info(`[Cache Hit] get-uploads-playlist: ${channelId}`);
+      return res.json(cachedResult);
+    }
+
     const result = await fetchUploadsPlaylistAndChannel(channelId);
 
     if (!result) {
       return res.status(404).json({ error: '채널 정보를 찾을 수 없습니다' });
     }
 
+    // 캐시에 저장 (1시간)
+    channelUploadsCache.set(cacheKey, result, 3600);
+    logger.info(`[Cache Miss] get-uploads-playlist: ${channelId} (Saved to cache)`);
+
     res.json(result);
   } catch (error) {
-    console.error('Error getting uploads playlist:', error);
+    logger.error('Error getting uploads playlist:', error);
     res.status(500).json({ error: 'Uploads 플레이리스트 조회 중 오류 발생' });
   }
 });
@@ -285,6 +388,13 @@ app.post('/api/get-playlist-videos', async (req, res) => {
       if (Number.isFinite(parsed) && Number.isInteger(parsed) && parsed >= 1 && parsed <= 200) {
         limit = parsed;
       }
+    }
+
+    const cacheKey = `${playlistId}:${maxResults}:${pageToken}:${limit || 'all'}`;
+    const cachedResult = playlistVideosCache.get(cacheKey);
+    if (cachedResult) {
+      logger.info(`[Cache Hit] get-playlist-videos: key=${cacheKey}`);
+      return res.json(cachedResult);
     }
 
     // limit이 있으면 페이지당 크기도 limit에 맞춰서 API 호출 자체를 줄임.
@@ -340,15 +450,19 @@ app.post('/api/get-playlist-videos', async (req, res) => {
       });
     }
 
-    // 클라이언트가 누적 limit에 도달하면 더 이상 호출하지 않으므로,
-    // 서버는 페이지당 정상 응답에 limit(정규화된 값)을 함께 돌려줍니다.
-    res.json({
+    const responseData = {
       videos,
       nextPageToken: data.nextPageToken || null,
       limit
-    });
+    };
+
+    // 캐시에 저장 (10분 = 600초)
+    playlistVideosCache.set(cacheKey, responseData, 600);
+    logger.info(`[Cache Miss] get-playlist-videos: key=${cacheKey} (Saved to cache)`);
+
+    res.json(responseData);
   } catch (error) {
-    console.error('Error getting playlist videos:', error);
+    logger.error('Error getting playlist videos:', error);
     res.status(500).json({ error: '영상 목록 조회 중 오류 발생' });
   }
 });
@@ -374,6 +488,6 @@ app.get('/api/health', (req, res) => {
 });
 
 app.listen(PORT, () => {
-  console.log(`🚀 서버가 http://localhost:${PORT}에서 실행 중입니다`);
-  console.log(`API 키 로드 상태: ${apiKey ? '✓ 로드됨' : '✗ 미로드'}`);
+  logger.info(`🚀 서버가 http://localhost:${PORT}에서 실행 중입니다`);
+  logger.info(`API 키 로드 상태: ${apiKey ? '✓ 로드됨' : '✗ 미로드'}`);
 });
