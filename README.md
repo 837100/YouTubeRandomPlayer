@@ -1,6 +1,9 @@
 # YouTubeRandomPlayer
-사용자가 지정한 채널의 영상을 랜덤으로 재생시키는 사이트 입니다.
 
-<img width="1072" height="1036" alt="Image" src="https://github.com/user-attachments/assets/43aca489-0797-4ea1-9f42-a3a90520897a" />
+이 사이트는 하나의 채널의 링크를 입력하여 그 크리에이터의 영상을 랜덤으로 재생시켜주는 사이트 입니다.
 
-<img width="1904" height="960" alt="Image" src="https://github.com/user-attachments/assets/8f35cdc8-8329-4c7c-8687-726bc0cc1d73" />
+유튜브 알고리즘으로 인해 봤던 영상과 관련된 영상들만 노출이 되어 그 크리에이터의 다양한 모습을 보기가 힘들다 느껴 해당 사이트를 만들었습니다.
+
+이 사이트의 기능을 이용하면 내가 원하는 조건에 맞는 랜덤한 영상을 재생시키기 때문에 내가 전에 어떤 영상을 봤던 상관없이 랜덤한 영상을 재생시켜줍니다.
+
+<img width="1440" height="2072" alt="Image" src="https://github.com/user-attachments/assets/8ac8303f-956a-4a36-89c0-d8ae835f270d" />
