@@ -95,6 +95,169 @@ body.cinema .cinemaToggle {
   border-color: #059669;
 }
 
+.helpBtn {
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  background: transparent;
+  color: var(--muted);
+  font-size: 22px;
+  line-height: 1;
+  cursor: pointer;
+  transition: color 0.15s ease, border-color 0.15s ease, background 0.15s ease;
+}
+
+.helpBtn:hover,
+.helpBtn:focus-visible {
+  color: var(--accent);
+  border-color: var(--accent);
+  background: rgba(56, 189, 248, 0.1);
+}
+
+.helpDialog {
+  width: min(520px, calc(100% - 32px));
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  background: #111827;
+  color: var(--text);
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.55);
+}
+
+.helpDialog::backdrop {
+  background: rgba(2, 6, 23, 0.76);
+  backdrop-filter: blur(3px);
+}
+
+.helpDialog__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 24px 24px 18px;
+  border-bottom: 1px solid var(--border);
+}
+
+.helpDialog__eyebrow {
+  margin: 0 0 4px;
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.helpDialog h2 {
+  margin: 0;
+  font-size: 24px;
+}
+
+.helpDialog__close {
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--muted);
+  font-size: 25px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.helpDialog__close:hover,
+.helpDialog__close:focus-visible {
+  background: rgba(148, 163, 184, 0.12);
+  color: var(--text);
+}
+
+.helpDialog__body {
+  padding: 20px 24px 24px;
+}
+
+.helpSteps {
+  display: grid;
+  gap: 18px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.helpStep {
+  display: grid;
+  grid-template-columns: 30px 1fr;
+  gap: 12px;
+  align-items: start;
+}
+
+.helpStep__number {
+  width: 30px;
+  height: 30px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: rgba(56, 189, 248, 0.14);
+  color: var(--accent);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.helpStep h3 {
+  margin: 2px 0 4px;
+  font-size: 15px;
+}
+
+.helpStep p,
+.helpNote__list {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.helpNote__list {
+  padding-left: 18px;
+}
+
+.helpNote__list li + li {
+  margin-top: 4px;
+}
+
+.helpStep code {
+  padding: 2px 5px;
+  border-radius: 4px;
+  background: #0b1220;
+  color: var(--text);
+  font-size: 12px;
+}
+
+.helpNote {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 22px;
+  padding: 12px 14px;
+  border: 1px solid rgba(56, 189, 248, 0.25);
+  border-radius: 10px;
+  background: rgba(56, 189, 248, 0.08);
+}
+
+.helpNote__icon {
+  flex: 0 0 auto;
+}
+
+@media (max-width: 560px) {
+  .helpDialog__head,
+  .helpDialog__body {
+    padding-left: 18px;
+    padding-right: 18px;
+  }
+}
+
 /* ── 레이아웃 (기본 = 세로 스택, 영화관 = 좌/우) ─────────── */
 .layout {
   display: flex;

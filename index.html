@@ -32,6 +32,9 @@
         <span class="cinemaToggle__icon" aria-hidden="true">▶</span>
         <span class="cinemaToggle__label">영화관 모드</span>
       </button>
+      <button type="button" id="helpBtn" class="helpBtn" aria-label="사용 설명서 열기" aria-controls="helpDialog">
+        <span aria-hidden="true">ⓘ</span>
+      </button>
     </div>
   </header>
 
@@ -284,6 +287,57 @@
       </div>
     </section>
   </main>
+
+  <dialog id="helpDialog" class="helpDialog" aria-labelledby="helpDialogTitle">
+    <div class="helpDialog__head">
+      <div>
+        <p class="helpDialog__eyebrow">처음 사용하시나요?</p>
+        <h2 id="helpDialogTitle">사용 설명서</h2>
+      </div>
+      <button type="button" id="helpCloseBtn" class="helpDialog__close" aria-label="사용 설명서 닫기">×</button>
+    </div>
+
+    <div class="helpDialog__body">
+      <ol class="helpSteps">
+        <li class="helpStep">
+          <span class="helpStep__number">1</span>
+          <div>
+            <h3>채널을 입력하세요</h3>
+            <p>채널 주소의 <strong>@</strong> 뒤에 있는 핸들만 입력하세요. <strong>@</strong>는 입력하지 않습니다. 예: <code>creatorname</code></p>
+          </div>
+        </li>
+        <li class="helpStep">
+          <span class="helpStep__number">2</span>
+          <div>
+            <h3>재생 방식을 고르세요</h3>
+            <p><strong>랜덤 재생</strong>은 영상을 무작위로 재생하고, <strong>순서대로 재생</strong>은 업로드 날짜 기준 최신순 또는 오래된순으로 재생합니다.</p>
+          </div>
+        </li>
+        <li class="helpStep">
+          <span class="helpStep__number">3</span>
+          <div>
+            <h3>필터를 설정하세요</h3>
+            <p>필요한 필터만 켜세요. Shorts와 Live 영상을 제외하거나, 가져올 영상 개수와 조회수 범위를 정할 수 있습니다.</p>
+          </div>
+        </li>
+        <li class="helpStep">
+          <span class="helpStep__number">4</span>
+          <div>
+            <h3>영상을 재생하세요</h3>
+            <p><strong>영상 재생</strong>을 누르면 설정한 조건에 맞는 영상을 불러옵니다. 특정 영상 하나를 재생하려면 아래의 <strong>직접 링크 재생</strong>을 이용하세요.</p>
+          </div>
+        </li>
+      </ol>
+
+      <div class="helpNote">
+        <span class="helpNote__icon" aria-hidden="true">💡</span>
+        <ul class="helpNote__list">
+          <li>영상 목록을 불러오는 데 잠시 시간이 걸릴 수 있습니다.</li>
+          <li>상단의 자동 재생을 켜면 영상이 끝난 뒤 다음 영상이 자동으로 재생됩니다.</li>
+        </ul>
+      </div>
+    </div>
+  </dialog>
 
   <script src="config.js"></script>
   <script src="scripts.js"></script>

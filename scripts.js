@@ -32,6 +32,9 @@ const viewCountFilterGroup = document.getElementById("viewCountFilterGroup");
 const viewCountFilterBody = document.getElementById("viewCountFilterBody");
 const cinemaToggleBtn = document.getElementById("cinemaToggleBtn");
 const cinemaToggleLabel = cinemaToggleBtn.querySelector(".cinemaToggle__label");
+const helpBtn = document.getElementById("helpBtn");
+const helpDialog = document.getElementById("helpDialog");
+const helpCloseBtn = document.getElementById("helpCloseBtn");
 const channelBar = document.getElementById("channelBar");
 const channelThumb = document.getElementById("channelThumb");
 const channelTitle = document.getElementById("channelTitle");
@@ -1797,6 +1800,23 @@ function setCinemaMode(enabled) {
 
 cinemaToggleBtn.addEventListener("click", () => {
   setCinemaMode(!document.body.classList.contains("cinema"));
+});
+
+/**
+ * 사용 설명서 모달을 닫고 열기 버튼으로 포커스를 돌려줍니다.
+ */
+function closeHelpDialog() {
+  helpDialog.close();
+  helpBtn.focus();
+}
+
+helpBtn.addEventListener("click", () => {
+  helpDialog.showModal();
+  helpCloseBtn.focus();
+});
+helpCloseBtn.addEventListener("click", closeHelpDialog);
+helpDialog.addEventListener("click", (event) => {
+  if (event.target === helpDialog) closeHelpDialog();
 });
 
 // 페이지 로드 시 영화관 모드 복원
