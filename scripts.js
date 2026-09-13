@@ -18,6 +18,7 @@ const playbackSequentialFilterGroup = document.getElementById("playbackSequentia
 const statusEl = document.getElementById("status");
 const player = document.getElementById("player");
 const loadVideoBtn = document.getElementById("loadVideoBtn");
+const nextVideoBtn = document.getElementById("nextVideoBtn");
 // "다른 랜덤 영상" 버튼은 사용하지 않음
 // const randomAgainBtn = document.getElementById("randomAgainBtn");
 const exclude60sCheckbox = document.getElementById("exclude60sCheckbox");
@@ -165,6 +166,15 @@ function setStatus(message) {
 }
 
 /**
+ * 영상 목록 로드 여부와 로딩 상태에 따라 "다음 영상 재생" 버튼의 표시 여부를 결정합니다.
+ */
+function updateNextButtonVisibility() {
+  if (!nextVideoBtn) return;
+  // 영상 풀이 있고 로딩 중이 아닐 때만 버튼 표시
+  nextVideoBtn.hidden = isLoading || currentVideos.length === 0;
+}
+
+/**
  * 영상을 불러오는 동안 두 재생 버튼을 함께 잠그거나 풉니다.
  */
 function setPlaybackControlsLoading(loading, loadButtonLabel = LOAD_BTN_LOADING_LABEL) {
@@ -185,6 +195,7 @@ function finishPlaybackLoading() {
 
   isLoading = false;
   setPlaybackControlsLoading(false);
+  updateNextButtonVisibility();
 }
 
 /**
@@ -1295,6 +1306,7 @@ function renderVideoGrid() {
 
   const moreBtn = document.getElementById("loadMoreBtn");
   if (moreBtn) moreBtn.hidden = !currentNextPageToken;
+  updateNextButtonVisibility();
 }
 
 /**
@@ -1612,6 +1624,9 @@ playbackOrderSelect.addEventListener("change", () => {
 clearVideoUrlBtn.addEventListener("click", clearVideoUrlInput);
 clearChannelBtn.addEventListener("click", clearChannelInput);
 playUrlBtn.addEventListener("click", playVideoFromUrl);
+nextVideoBtn.addEventListener("click", () => {
+  loadRandomVideo();
+});
 player.addEventListener("load", () => {
   finishPlaybackLoading();
   // iframe 로드 완료 후 listening 명령을 보내 상태 이벤트 수신 시작

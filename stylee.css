@@ -327,12 +327,17 @@ body.cinema .sideCard .btn-secondary {
   font-size: 13px;
 }
 
-.status {
+.status-container {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
   margin-bottom: 14px;
+}
+
+.status {
+  flex: 1;
+  margin-bottom: 0;
   color: var(--muted);
   font-size: 14px;
   min-height: 20px;
@@ -1288,3 +1293,28 @@ body.cinema .videoCard__title {
   color: #facc15;
 }
 
+
+.btn-next {
+  flex: 0 0 auto;
+  padding: 6px 12px;
+  font-size: 13px;
+  background: var(--accent);
+  color: #00111a;
+  border-radius: 8px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: opacity 0.15s ease, transform 0.1s ease;
+  white-space: nowrap;
+}
+
+.btn-next:hover {
+  opacity: 0.9;
+}
+
+.btn-next:active {
+  transform: scale(0.95);
+}
+
+.btn-next[hidden] {
+  display: none;
+}
